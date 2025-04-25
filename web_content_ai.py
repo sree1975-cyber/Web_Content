@@ -195,38 +195,50 @@ def fetch_metadata(url):
 
 def add_link_section(df, excel_file):
     """Section for adding new links with beautiful card layout"""
-    with st.container():
-        st.markdown("### 🌐 Add New Web Content")
-        with st.form("add_link_form"):
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                url = st.text_input("URL*", placeholder="https://example.com", help="Enter the full URL including https://")
-            with col2:
-                st.write("")
-                st.write("")
-                if st.form_submit_button("Fetch Metadata", disabled=not url):
-                    with st.spinner("Fetching..."):
-                        title, description = fetch_metadata(url)
-                        st.session_state['auto_title'] = title
-                        st.session_state['auto_description'] = description
-            
-            title = st.text_input("Title*", value=st.session_state.get('auto_title', ''), 
-                                help="Give your link a descriptive title")
-            description = st.text_area("Description", value=st.session_state.get('auto_description', ''), 
-                                     height=100, help="Add notes about why this link is important")
-            
+    st.markdown("### 🌐 Add New Web Content")
+    
+    with st.form("add_link_form"):
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            url = st.text_input("URL*", placeholder="https://example.com", help="Enter the full URL including https://")
+        with col2:
+            st.write("")  # For vertical alignment
+            st.write("")
+            fetch_btn = st.form_submit_button("Fetch Metadata", disabled=not url)
+        
+        if fetch_btn and url:
+            with st.spinner("Fetching..."):
+                title, description = fetch_metadata(url)
+                st.session_state['auto_title'] = title
+                st.session_state['auto_description'] = description
+        
+        title = st.text_input("Title*", value=st.session_state.get('auto_title', ''), 
+                            help="Give your link a descriptive title")
+        description = st.text_area("Description", value=st.session_state.get('auto_description', ''), 
+                                 height=100, help="Add notes about why this link is important")
+        
+        # Tags input with proper error handling
+        try:
             tags = st_tags(
                 label='Tags:',
                 text='Press enter to add',
                 value=[],
                 suggestions=['research', 'tutorial', 'news', 'tool', 'inspiration'],
-                help="Add tags to help with organization"
+                key="tags_input"  # Added key parameter
             )
-            
-            submitted = st.form_submit_button("💾 Save Link")
-            if submitted and url:
+        except Exception as e:
+            st.error(f"Error with tags input: {str(e)}")
+            tags = []
+        
+        submitted = st.form_submit_button("💾 Save Link")
+        
+        if submitted and url:
+            if not title:
+                st.warning("Please provide a title for the link")
+            else:
                 updated_df = save_link(df, excel_file, url, title, description, tags)
                 return updated_df
+    
     return df
 
 def browse_section(df):
