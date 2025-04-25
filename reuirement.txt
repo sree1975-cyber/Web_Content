@@ -2,9 +2,8 @@ streamlit==1.32.0
 sqlite3==2.6.0
 requests==2.31.0
 numpy==1.26.0
-sentence-transformers==2.2.2
 Pillow==10.0.0
 python-dotenv==1.0.0
 streamlit-option-menu==0.3.6
 streamlit-tags==1.2.7
-urllib3==2.0.0  # For better URL handling
+urllib3==2.0.0
