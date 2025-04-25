@@ -298,7 +298,8 @@ def browse_section(df, excel_file):
     if search_query:
         search_lower = search_query.lower()
         mask = (
-            filtered_df['title'].str.lower().str.contains(search_lower, na=False) |
+            #filtered_df['title'].str.lower().str.contains(search_lower, na=False) |
+            filtered_df['title'].str.lower().str.contains(search_lower, na=False) | 
             filtered_df['url'].str.lower().str.contains(search_lower, na=False) |
             filtered_df['description'].str.lower().str.contains(search_lower, na=False) |
             filtered_df['tags'].apply(lambda x: any(search_lower in str(tag).lower() 
