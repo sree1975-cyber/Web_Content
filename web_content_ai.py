@@ -296,15 +296,16 @@ def browse_section(df, excel_file):
     filtered_df = df.copy()
     
     if search_query:
-        search_lower = search_query.lower()
-        mask = (
-            filtered_df['title'].str.lower().str.contains(search_lower, na=False) |
-            filtered_df['url'].str.lower().str.contains(search_lower, na=False) |
-            filtered_df['description'].str.lower().str.contains(search_lower, na=False) |
-            filtered_df['tags'].apply(lambda x: any(search_lower in str(tag).lower() 
-                                    for tag in (x if isinstance(x, list) else []))
+    search_lower = search_query.lower()
+    mask = (
+        filtered_df['title'].str.lower().str.contains(search_lower, na=False) |
+        filtered_df['url'].str.lower().str.contains(search_lower, na=False) |
+        filtered_df['description'].str.lower().str.contains(search_lower, na=False) |
+        filtered_df['tags'].apply(
+            lambda x: any(search_lower in str(tag).lower() for tag in (x if isinstance(x, list) else []))
         )
-        filtered_df = filtered_df[mask]
+    )
+    filtered_df = filtered_df[mask]
     
     if selected_tags:
         mask = filtered_df['tags'].apply(
