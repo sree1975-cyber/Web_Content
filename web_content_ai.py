@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 WEB CONTENT MANAGER
-A robust application to save and organize web links with:
-- AI-powered tagging and search
-- Visual bookmark management
-- Semantic content analysis
-- Beautiful UI with AI-generated images
+A single-page application to save and organize web links with AI-powered features.
 """
 import streamlit as st
 import sqlite3
@@ -21,7 +17,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from streamlit_option_menu import option_menu
 from streamlit_tags import st_tags
 
-# Configuration
+# Set page configuration (MUST be the first Streamlit command)
 st.set_page_config(
     page_title="Web Content Manager",
     page_icon="🔖",
@@ -29,7 +25,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# AI-generated header image (base64 encoded placeholder)
+# Helper functions
 def get_image_base64():
     """Return base64 encoded placeholder image"""
     img = Image.new('RGB', (800, 400), color='#4b8bbe')
@@ -101,85 +97,13 @@ def fetch_metadata(url):
 def load_model():
     """Load sentence transformer model with error handling"""
     try:
-        # Explicitly load model on CPU to avoid GPU issues
+        # Explicitly load model on CPU for Streamlit Cloud
         model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
         return model
     except Exception as e:
         st.error(f"Model loading failed: {str(e)}")
         st.info("Please ensure all requirements are installed and try again")
         return None
-
-def main():
-    """Main application function"""
-    display_header()
-    
-    with st.expander("ℹ️ About this app", expanded=False):
-        st.write("""
-        **Web Content Manager** helps you save and organize web links with:
-        - AI-powered tagging and search
-        - Visual bookmark management
-        - Semantic content analysis
-        - Beautiful intuitive interface
-        
-        Get started by adding your first link using the sidebar menu!
-        """)
-    
-    # Initialize components
-    conn = init_db()
-    model = load_model()
-    
-    if conn is None or model is None:
-        return
-    
-    # Sidebar navigation with icons
-    with st.sidebar:
-        selected = option_menu(
-            "Main Menu",
-            ["Add Link", "Browse", "Search", "Tags", "Settings"],
-            icons=['plus-circle', 'book', 'search', 'tags', 'gear'],
-            default_index=0
-        )
-    
-    if selected == "Add Link":
-        add_link_section(conn, model)
-    elif selected == "Browse":
-        browse_section(conn)
-    elif selected == "Search":
-        search_section(conn, model)
-    elif selected == "Tags":
-        tags_section(conn)
-    elif selected == "Settings":
-        settings_section()
-
-def add_link_section(conn, model):
-    """Section for adding new links"""
-    st.subheader("🌐 Add New Web Content")
-    
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        url = st.text_input("URL", placeholder="https://example.com")
-    with col2:
-        st.write("")
-        st.write("")
-        if st.button("Fetch Metadata", disabled=not url):
-            with st.spinner("Fetching..."):
-                title, description = fetch_metadata(url)
-                st.session_state['auto_title'] = title
-                st.session_state['auto_description'] = description
-    
-    title = st.text_input("Title", value=st.session_state.get('auto_title', ''))
-    description = st.text_area("Description", value=st.session_state.get('auto_description', ''), height=100)
-    
-    # Improved tag input
-    tags = st_tags(
-        label='Tags:',
-        text='Press enter to add',
-        value=[],
-        suggestions=['research', 'tutorial', 'news', 'tool', 'inspiration']
-    )
-    
-    if st.button("💾 Save Link", disabled=not url):
-        save_link(conn, model, url, title, description, tags)
 
 def save_link(conn, model, url, title, description, tags):
     """Save link to database"""
@@ -230,22 +154,100 @@ def save_link(conn, model, url, title, description, tags):
     except Exception as e:
         st.error(f"Error saving link: {str(e)}")
 
-# Placeholder for missing functions to avoid runtime errors
+# Section functions
+def add_link_section(conn, model):
+    """Section for adding new links"""
+    st.subheader("🌐 Add New Web Content")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        url = st.text_input("URL", placeholder="https://example.com")
+    with col2:
+        st.write("")
+        st.write("")
+        if st.button("Fetch Metadata", disabled=not url):
+            with st.spinner("Fetching..."):
+                title, description = fetch_metadata(url)
+                st.session_state['auto_title'] = title
+                st.session_state['auto_description'] = description
+    
+    title = st.text_input("Title", value=st.session_state.get('auto_title', ''))
+    description = st.text_area("Description", value=st.session_state.get('auto_description', ''), height=100)
+    
+    tags = st_tags(
+        label='Tags:',
+        text='Press enter to add',
+        value=[],
+        suggestions=['research', 'tutorial', 'news', 'tool', 'inspiration']
+    )
+    
+    if st.button("💾 Save Link", disabled=not url):
+        save_link(conn, model, url, title, description, tags)
+
 def browse_section(conn):
-    st.subheader("Browse Links")
+    """Placeholder for browse section"""
+    st.subheader("📚 Browse Links")
     st.write("Browse functionality not implemented yet.")
 
 def search_section(conn, model):
-    st.subheader("Search Links")
+    """Placeholder for search section"""
+    st.subheader("🔍 Search Links")
     st.write("Search functionality not implemented yet.")
 
 def tags_section(conn):
-    st.subheader("Manage Tags")
+    """Placeholder for tags section"""
+    st.subheader("🏷️ Manage Tags")
     st.write("Tags functionality not implemented yet.")
 
 def settings_section():
-    st.subheader("Settings")
+    """Placeholder for settings section"""
+    st.subheader("⚙️ Settings")
     st.write("Settings functionality not implemented yet.")
 
-if __name__ == "__ MEETINGmain__":
+# Main application function
+def main():
+    # Initialize components
+    conn = init_db()
+    model = load_model()
+    
+    if conn is None or model is None:
+        return
+    
+    # Display header
+    display_header()
+    
+    # About section
+    with st.expander("ℹ️ About this app", expanded=False):
+        st.write("""
+        **Web Content Manager** helps you save and organize web links with:
+        - AI-powered tagging and search
+        - Visual bookmark management
+        - Semantic content analysis
+        - Beautiful intuitive interface
+        
+        Get started by selecting an option from the sidebar!
+        """)
+    
+    # Sidebar navigation
+    with st.sidebar:
+        selected = option_menu(
+            "Main Menu",
+            ["Add Link", "Browse", "Search", "Tags", "Settings"],
+            icons=['plus-circle', 'book', 'search', 'tags', 'gear'],
+            default_index=0
+        )
+    
+    # Render selected section
+    if selected == "Add Link":
+        add_link_section(conn, model)
+    elif selected == "Browse":
+        browse_section(conn)
+    elif selected == "Search":
+        search_section(conn, model)
+    elif selected == "Tags":
+        tags_section(conn)
+    elif selected == "Settings":
+        settings_section()
+
+if __name__ == "__main__":
     main()
