@@ -213,7 +213,9 @@ def add_link_section(df, excel_file):
     # Check if URL is non-empty and valid (basic check)
     is_url_valid = url.startswith(("http://", "https://")) if url else False
     
-    # Fetch button (now enabled only if URL is valid)
+    # Fetch
+
+ button (now enabled only if URL is valid)
     if st.button("Fetch Metadata", disabled=not is_url_valid):
         with st.spinner("Fetching..."):
             title, description, keywords = fetch_metadata(url)
@@ -295,22 +297,22 @@ def browse_section(df, excel_file):
     # Apply search filters
     filtered_df = df.copy()
     
-if search_query:
-    search_lower = search_query.lower()
-    mask = (
-        filtered_df['title'].str.lower().str.contains(search_lower, na=False) |
-        filtered_df['url'].str.lower().str.contains(search_lower, na=False) |
-        filtered_df['description'].str.lower().str.contains(search_lower, na=False) |
-        filtered_df['tags'].apply(
-            lambda x: any(search_lower in str(tag).lower() for tag in (x if isinstance(x, list) else []))
+    if search_query:
+        search_lower = search_query.lower()
+        mask = (
+            filtered_df['title'].str.lower().str.contains(search_lower, na=False) |
+            filtered_df['url'].str.lower().str.contains(search_lower, na=False) |
+            filtered_df['description'].str.lower().str.contains(search_lower, na=False) |
+            filtered_df['tags'].apply(
+                lambda x: any(search_lower in str(tag).lower() for tag in (x if isinstance(x, list) else []))
+            )
         )
-    )
-    filtered_df = filtered_df[mask]
+        filtered_df = filtered_df[mask]
     
     if selected_tags:
         mask = filtered_df['tags'].apply(
             lambda x: any(str(tag) in map(str, (x if isinstance(x, list) else [])) 
-                      for tag in selected_tags)
+                          for tag in selected_tags)
         )
         filtered_df = filtered_df[mask]
     
@@ -322,7 +324,7 @@ if search_query:
     with st.expander("📊 View All Links as Data Table", expanded=False):
         display_df = filtered_df.copy()
         display_df['tags'] = display_df['tags'].apply(
-            lambda x: ', '.join(str(tag) for tag in (x if isinstance(x, list) else []))
+            lambda x: ', '.join(str(tag) for tag in (x if isinstance(x, list) else [])))
         st.dataframe(
             display_df[['title', 'url', 'tags', 'created_at']],
             use_container_width=True,
@@ -359,7 +361,7 @@ if search_query:
 
 def format_tags(tags):
     """Format tags as pretty pills"""
-    if not tags or (isinstance(tags, float) and pd.isna(tags):
+    if not tags or (isinstance(tags, float) and pd.isna(tags)):
         return ""
     
     if isinstance(tags, str):
