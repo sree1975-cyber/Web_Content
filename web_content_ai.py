@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-WEB CONTENT MANAGER - Enhanced Version with Public Sharing and Form Clearing
+WEB CONTENT MANAGER - Enhanced Version with Restored Success Message and Balloons
 """
 import streamlit as st
 import pandas as pd
@@ -176,6 +176,7 @@ def delete_selected_links(df, excel_file, selected_urls):
         else:
             st.session_state['user_df'] = df[df['source'] == 'User']
             st.success(f"✅ {len(selected_urls)} link(s) deleted successfully!")
+            st.balloons()
         return df
     except Exception as e:
         st.error(f"Error deleting links: {str(e)}")
@@ -241,7 +242,8 @@ def add_link_section(public_df, public_excel_file):
             st.session_state['auto_title'] = title
             st.session_state['auto_description'] = description
             st.session_state['suggested_tags'] = keywords
-            st.rerun()
+            # Do not rerun here to avoid resetting the form prematurely
+            # Form will update with fetched values
     
     with st.form("add_link_form", clear_on_submit=True):
         title = st.text_input(
@@ -306,7 +308,7 @@ def add_link_section(public_df, public_excel_file):
                               'title_input', 'description_input', 'existing_tags', 'new_tag']:
                         if key in st.session_state:
                             del st.session_state[key]
-                    st.rerun()
+                    # Do not rerun here to ensure success message and balloons display
                 else:
                     st.error("Failed to process link")
     
@@ -373,7 +375,7 @@ def browse_section(public_df, public_excel_file):
                 filtered_df['url'].str.lower().str.contains(search_lower, na=False) |
                 filtered_df['description'].str.lower().str.contains(search_lower, na=False) |
                 filtered_df['tags'].apply(
-                    lambda x: any(search_lower in str(tag).lower() for tag in (x if isinstance(x, list) else []))
+                    lambda x: any(search_lower in str(tag).lower() for tag in (x if isinstance(sublist, list) else []))
                 )
             )
             filtered_df = filtered_df[mask]
@@ -436,7 +438,8 @@ def browse_section(public_df, public_excel_file):
                 combined_df = delete_selected_links(combined_df, public_excel_file, st.session_state.selected_urls)
                 st.session_state['user_df'] = combined_df[combined_df['source'] == 'User']
                 st.session_state.selected_urls = []
-                st.rerun()
+                # No rerun needed here as success message and balloons are in delete_selected_links
+                # st.rerun()
 
 def format_tags(tags):
     """Format tags as pretty pills"""
