@@ -16,6 +16,8 @@ from sentence_transformers import SentenceTransformer
 from streamlit_option_menu import option_menu
 from streamlit_tags import st_tags
 import logging
+import boto3
+import os
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -39,7 +41,22 @@ def get_image_base64():
 def init_db():
     """Initialize database with error handling"""
     try:
-        conn = sqlite3.connect('web_content.db', check_same_thread=False)
+        # AWS S3 setup
+        s3 = boto3.client('s3',
+                         aws_access_key_id=st.secrets['AWS']['AWS_ACCESS_KEY_ID'],
+                         aws_secret_access_key=st.secrets['AWS']['AWS_SECRET_ACCESS_KEY'])
+        bucket_name = st.secrets['AWS']['S3_BUCKET']
+        db_file = 'web_content.db'
+        
+        # Download database from S3 if it exists
+        if not os.path.exists(db_file):
+            try:
+                s3.download_file(bucket_name, 'web_content.db', db_file)
+                logging.info("Downloaded database from S3")
+            except s3.exceptions.NoSuchKey:
+                logging.info("No database found in S3, creating new one")
+        
+        conn = sqlite3.connect(db_file, check_same_thread=False)
         c = conn.cursor()
         
         c.execute('''CREATE TABLE IF NOT EXISTS links
@@ -65,7 +82,9 @@ def init_db():
                       embedding BLOB)''')
         
         conn.commit()
-        logging.info("Database initialized successfully")
+        # Upload initial database to S3
+        s3.upload_file(db_file, bucket_name, 'web_content.db')
+        logging.info("Uploaded initial database to S3")
         return conn
     except Exception as e:
         st.error(f"Database initialization failed: {str(e)}")
@@ -73,10 +92,20 @@ def init_db():
         return None
 
 def close_db(conn):
-    """Close database connection"""
+    """Close database connection and upload to S3"""
     if conn:
-        conn.close()
-        logging.info("Database connection closed")
+        try:
+            s3 = boto3.client('s3',
+                             aws_access_key_id=st.secrets['AWS']['AWS_ACCESS_KEY_ID'],
+                             aws_secret_access_key=st.secrets['AWS']['AWS_SECRET_ACCESS_KEY'])
+            bucket_name = st.secrets['AWS']['S3_BUCKET']
+            db_file = 'web_content.db'
+            s3.upload_file(db_file, bucket_name, 'web_content.db')
+            logging.info("Uploaded database to S3 before closing")
+            conn.close()
+            logging.info("Database connection closed")
+        except Exception as e:
+            logging.error(f"Error closing database: {str(e)}")
 
 def display_header():
     """Display beautiful header with AI image"""
@@ -116,9 +145,7 @@ def load_model():
     except Exception as e:
         st.error(f"Model loading failed: {str(e)}")
         logging.error(f"Model loading failed: {str(e)}")
-        st&
-```python
-.info("Please ensure all requirements are installed and try again")
+        st.info("Please ensure all requirements are installed and try again")
         return None
 
 def save_link(conn, model, url, title, description, tags):
@@ -159,7 +186,14 @@ def save_link(conn, model, url, title, description, tags):
         """, (link_id, embedding.tobytes()))
         
         conn.commit()
-        logging.info(f"Link saved successfully: {url}")
+        # Upload to S3 after commit
+        s3 = boto3.client('s3',
+                         aws_access_key_id=st.secrets['AWS']['AWS_ACCESS_KEY_ID'],
+                         aws_secret_access_key=st.secrets['AWS']['AWS_SECRET_ACCESS_KEY'])
+        bucket_name = st.secrets['AWS']['S3_BUCKET']
+        s3.upload_file('web_content.db', bucket_name, 'web_content.db')
+        logging.info("Uploaded database to S3 after saving link")
+        
         st.success("✅ Link saved successfully!")
         st.balloons()
         
@@ -201,7 +235,7 @@ def add_link_section(conn, model):
     )
     
     if st.button("💾 Save Link", disabled=not url):
-        saveicznie_link(conn, model, url, title, description, tags)
+        save_link(conn, model, url, title, description, tags)
 
 def browse_section(conn):
     """Section for browsing saved links"""
@@ -218,8 +252,8 @@ def browse_section(conn):
         
         for link_id, url, title, description, created_at in links:
             with st.expander(f"{title or url} (Saved: {created_at})"):
-                st.write(f**URL**: {url}")
-                st.write(f**Description**: {description or 'No description'}")
+                st.markdown(f"**URL**: {url}")
+                st.markdown(f"**Description**: {description or 'No description'}")
                 # Fetch tags
                 c.execute("""
                     SELECT t.name FROM tags t
@@ -227,7 +261,7 @@ def browse_section(conn):
                     WHERE lt.link_id = ?
                 """, (link_id,))
                 tags = [row[0] for row in c.fetchall()]
-                st.write(f**Tags**: {', '.join(tags) if tags else 'None'}")
+                st.markdown(f"**Tags**: {', '.join(tags) if tags else 'None'}")
     except Exception as e:
         st.error(f"Error fetching links: {str(e)}")
         logging.error(f"Error fetching links: {str(e)}")
@@ -254,6 +288,7 @@ def main():
     model = load_model()
     
     if conn is None or model is None:
+        close_db(conn)
         return
     
     # Sidebar navigation
