@@ -11,7 +11,7 @@ from streamlit_option_menu import option_menu
 from streamlit_tags import st_tags
 import logging
 import os
-import re
+from html import escape
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -61,6 +61,13 @@ st.markdown("""
         margin-right: 0.5rem;
         margin-bottom: 0.3rem;
     }
+    
+    /* Delete button styling */
+    .delete-btn {
+        background-color: #ff4b4b !important;
+        color: white !important;
+        margin-top: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -92,7 +99,7 @@ def save_data(df, excel_file):
         # Convert tags from list to string before saving
         df_to_save = df.copy()
         if 'tags' in df_to_save.columns:
-            df_to_save['tags'] = df_to_save['tags'].apply(lambda x: ','.join(x) if isinstance(x, list) else '')
+            df_to_save['tags'] = df_to_save['tags'].apply(lambda x: ','.join(map(str, x)) if isinstance(x, list) else '')
         
         df_to_save.to_excel(excel_file, index=False, engine='openpyxl')
         logging.info("Data saved successfully")
@@ -115,7 +122,7 @@ def save_link(df, url, title, description, tags):
             idx = existing_index[0]
             df.at[idx, 'title'] = title
             df.at[idx, 'description'] = description
-            df.at[idx, 'tags'] = tags
+            df.at[idx, 'tags'] = [str(tag).strip() for tag in tags if str(tag).strip()]
             df.at[idx, 'updated_at'] = now
             action = "updated"
         else:
@@ -126,7 +133,7 @@ def save_link(df, url, title, description, tags):
                 'url': url,
                 'title': title,
                 'description': description,
-                'tags': tags,
+                'tags': [str(tag).strip() for tag in tags if str(tag).strip()],
                 'created_at': now,
                 'updated_at': now
             }
@@ -138,6 +145,23 @@ def save_link(df, url, title, description, tags):
         st.error(f"Error saving link: {str(e)}")
         logging.error(f"Link save failed: {str(e)}")
         return df, None
+
+def delete_link(df, excel_file, url):
+    """Delete a link from the DataFrame"""
+    try:
+        if url in df['url'].values:
+            df = df[df['url'] != url]
+            if save_data(df, excel_file):
+                st.success("✅ Link deleted successfully!")
+                st.session_state['df'] = df
+                st.balloons()
+                return df
+        else:
+            st.warning("Link not found in database")
+        return df
+    except Exception as e:
+        st.error(f"Error deleting link: {str(e)}")
+        return df
 
 def display_header():
     """Display beautiful header"""
@@ -165,12 +189,10 @@ def fetch_metadata(url):
         keywords = soup.find('meta', attrs={'name': 'keywords'})
         keywords = keywords['content'].split(',')[:5] if keywords else []
         
-        return title, description, keywords
+        return title, description, [k.strip() for k in keywords if k.strip()]
     except Exception as e:
         st.warning(f"Couldn't fetch metadata: {str(e)}")
         return url, "", []
-
-from html import escape  # Add this import at the top
 
 def add_link_section(df, excel_file):
     """Section for adding new links with working Fetch button"""
@@ -197,7 +219,7 @@ def add_link_section(df, excel_file):
             title, description, keywords = fetch_metadata(url)
             st.session_state['auto_title'] = title
             st.session_state['auto_description'] = description
-            st.session_state['suggested_tags'] = [tag.strip() for tag in keywords if tag.strip()]
+            st.session_state['suggested_tags'] = keywords
             st.rerun()
     
     # The rest of the form
@@ -218,11 +240,12 @@ def add_link_section(df, excel_file):
         # Smart tags with validation
         suggested_tags = st.session_state.get('suggested_tags', []) + \
                        ['research', 'tutorial', 'news', 'tool', 'inspiration']
-        suggested_tags = [tag for tag in suggested_tags if tag and str(tag).strip()]
+        suggested_tags = [str(tag).strip() for tag in suggested_tags if str(tag).strip()]
         
+        st.markdown("**Tags:** (Press Enter after each tag)")
         tags = st_tags(
-            label='Tags:',
-            text='Press enter to add',
+            label='',
+            text='Add a tag and press Enter',
             value=[],
             suggestions=list(set(suggested_tags)),
             key="tags_input"
@@ -230,43 +253,46 @@ def add_link_section(df, excel_file):
         
         submitted = st.form_submit_button("💾 Save Link")
         
-        if submitted and url and title:
-            df, action = save_link(df, url, title, description, tags)
-            if action:
-                if save_data(df, excel_file):
-                    st.success(f"✅ Link {action} successfully!")
-                    st.balloons()
-                    # Clear auto-filled fields
-                    if 'auto_title' in st.session_state:
-                        del st.session_state['auto_title']
-                    if 'auto_description' in st.session_state:
-                        del st.session_state['auto_description']
-                    if 'suggested_tags' in st.session_state:
-                        del st.session_state['suggested_tags']
-                    st.rerun()
+        if submitted:
+            if not url:
+                st.error("Please enter a URL")
+            elif not title:
+                st.error("Please enter a title")
+            else:
+                df, action = save_link(df, url, title, description, tags)
+                if action:
+                    if save_data(df, excel_file):
+                        st.success(f"✅ Link {action} successfully!")
+                        st.balloons()
+                        # Clear auto-filled fields
+                        for key in ['auto_title', 'auto_description', 'suggested_tags']:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.rerun()
     
     return df
 
-def browse_section(df):
-    """Section for browsing saved links with powerful search"""
+def browse_section(df, excel_file):
+    """Section for browsing saved links with powerful search and delete functionality"""
     st.markdown("### 📚 Browse Saved Links")
     
     if df.empty:
         st.info("✨ No links saved yet. Add your first link to get started!")
         return
     
-    # Enhanced search functionality
+    # Powerful search functionality
     search_col, tag_col = st.columns([3, 1])
     with search_col:
         search_query = st.text_input("Search content", 
-                                  placeholder="Search by title, URL, description or tags")
+                                    placeholder="Search by title, URL, description or tags")
     with tag_col:
+        # Get all unique tags
         all_tags = sorted({str(tag).strip() for sublist in df['tags'] 
                          for tag in (sublist if isinstance(sublist, list) else []) 
                          if str(tag).strip()})
         selected_tags = st.multiselect("Filter by tags", options=all_tags)
     
-    # Apply enhanced search filters
+    # Apply search filters
     filtered_df = df.copy()
     
     if search_query:
@@ -276,7 +302,7 @@ def browse_section(df):
             filtered_df['url'].str.lower().str.contains(search_lower, na=False) |
             filtered_df['description'].str.lower().str.contains(search_lower, na=False) |
             filtered_df['tags'].apply(lambda x: any(search_lower in str(tag).lower() 
-                                                 for tag in (x if isinstance(x, list) else [])))
+                                    for tag in (x if isinstance(x, list) else []))
         )
         filtered_df = filtered_df[mask]
     
@@ -295,7 +321,7 @@ def browse_section(df):
     with st.expander("📊 View All Links as Data Table", expanded=False):
         display_df = filtered_df.copy()
         display_df['tags'] = display_df['tags'].apply(
-            lambda x: ', '.join(str(tag) for tag in (x if isinstance(x, list) else [])))
+            lambda x: ', '.join(str(tag) for tag in (x if isinstance(x, list) else []))
         st.dataframe(
             display_df[['title', 'url', 'tags', 'created_at']],
             use_container_width=True,
@@ -308,13 +334,13 @@ def browse_section(df):
             }
         )
     
-    # Display individual cards with proper HTML escaping
+    # Display individual cards with delete functionality
     for _, row in filtered_df.iterrows():
-        with st.expander(f"🔗 {escape(str(row['title']))}"):
+        with st.expander(f"🔗 {escape(str(row['title']))}", expanded=False):
             st.markdown(f"""
             <div class="card">
                 <p><strong>URL:</strong> <a href="{escape(str(row['url']))}" target="_blank">{escape(str(row['url']))}</a></p>
-                <p><strong>Description:</strong> {escape(str(row['description'])) if row['description'] else 'No description available'}</p>
+                <p><strong>Description:</strong> {escape(str(row['description'])) if pd.notna(row['description']) else 'No description available'}</p>
                 <div style="margin-top: 0.5rem;">
                     {format_tags(row['tags'])}
                 </div>
@@ -324,43 +350,15 @@ def browse_section(df):
                 </p>
             </div>
             """, unsafe_allow_html=True)
-    
-    # Display expandable DataFrame view
-    with st.expander("📊 View All Links as Data Table", expanded=False):
-        display_df = filtered_df.copy()
-        display_df['tags'] = display_df['tags'].apply(lambda x: ', '.join(x) if isinstance(x, list) else '')
-        st.dataframe(
-            display_df[['title', 'url', 'tags', 'created_at']],
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "title": "Title",
-                "url": st.column_config.LinkColumn("URL"),
-                "tags": "Tags",
-                "created_at": "Date Added"
-            }
-        )
-    
-    # Display individual cards
-    for _, row in filtered_df.iterrows():
-        with st.expander(f"🔗 {row['title']}"):
-            st.markdown(f"""
-            <div class="card">
-                <p><strong>URL:</strong> <a href="{row['url']}" target="_blank">{row['url']}</a></p>
-                <p><strong>Description:</strong> {row['description'] or 'No description available'}</p>
-                <div style="margin-top: 0.5rem;">
-                    {format_tags(row['tags'])}
-                </div>
-                <p style="font-size: 0.8rem; color: #666; margin-top: 0.5rem;">
-                    <strong>Added:</strong> {row['created_at']} | 
-                    <strong>Updated:</strong> {row['updated_at']}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+            
+            # Delete button
+            if st.button("🗑️ Delete Link", key=f"delete_{row['url']}", 
+                        on_click=lambda u=row['url']: delete_link(df, excel_file, u)):
+                st.rerun()
 
 def format_tags(tags):
     """Format tags as pretty pills"""
-    if not tags or (isinstance(tags, float) and pd.isna(tags)):
+    if not tags or (isinstance(tags, float) and pd.isna(tags):
         return ""
     
     if isinstance(tags, str):
@@ -371,7 +369,7 @@ def format_tags(tags):
         if tag and str(tag).strip():
             html_tags.append(f"""
             <span class="tag">
-                {str(tag).strip()}
+                {escape(str(tag).strip())}
             </span>
             """)
     return "".join(html_tags)
@@ -400,7 +398,8 @@ def download_section(df, excel_file):
                     label="Download Excel",
                     data=f,
                     file_name="web_links.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    help="Download all links in Excel format"
                 )
         with col2:
             # CSV download
@@ -409,7 +408,8 @@ def download_section(df, excel_file):
                 label="Download CSV",
                 data=csv,
                 file_name="web_links.csv",
-                mime="text/csv"
+                mime="text/csv",
+                help="Download all links in CSV format"
             )
         
         # Display stats
@@ -442,6 +442,7 @@ def main():
                 <li>📌 One-click saving of important web resources</li>
                 <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
                 <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
+                <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
                 <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
                 <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
                 <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
@@ -475,7 +476,7 @@ def main():
         updated_df = add_link_section(df, excel_file)
         st.session_state['df'] = updated_df
     elif selected == "Browse Links":
-        browse_section(df)
+        browse_section(df, excel_file)
     elif selected == "Export Data":
         download_section(df, excel_file)
 
