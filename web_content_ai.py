@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-WEB CONTENT MANAGER - Enhanced Version with Fixed Form Clearing
+WEB CONTENT MANAGER - Enhanced Version with Fixed Form Clearing and Success Feedback
 """
 import streamlit as st
 import pandas as pd
@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from streamlit_option_menu import option_menu
 import logging
 import os
+import time
 from html import escape
 
 # Set up logging
@@ -300,7 +301,8 @@ def add_link_section(df, excel_file):
                                   'existing_tags_input', 'new_tag_input']:
                             if key in st.session_state:
                                 del st.session_state[key]
-                        # Refresh the page to update UI
+                        # Delay to show success message and balloons
+                        time.sleep(2)
                         st.rerun()
                     else:
                         st.error("Failed to save link to Excel file")
