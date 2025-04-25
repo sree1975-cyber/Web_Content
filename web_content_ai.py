@@ -1,18 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 WEB CONTENT MANAGER
-A single-page application to save and organize web links with AI-powered features.
+A single-page application to save and organize web links.
 """
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
-import numpy as np
-from PIL import Image
-import io
-import base64
-from sentence_transformers import SentenceTransformer
 from streamlit_option_menu import option_menu
 from streamlit_tags import st_tags
 import logging
@@ -30,13 +25,6 @@ st.set_page_config(
 )
 
 # Helper functions
-def get_image_base64():
-    """Return base64 encoded placeholder image"""
-    img = Image.new('RGB', (400, 200), color='#4b8bbe')  # Reduced size
-    buffered = io.BytesIO()
-    img.save(buffered, format="PNG")
-    return base64.b64encode(buffered.getvalue()).decode()
-
 def init_data():
     """Initialize or load Excel file for storing links"""
     excel_file = 'links.xlsx'
@@ -98,15 +86,19 @@ def save_link(df, excel_file, url, title, description, tags):
         return df
 
 def display_header():
-    """Display header aligned to the right with smaller image"""
-    header_html = f"""
-    <div style="background-color:#4b8bbe;padding:10px;border-radius:10px;width:50%;float:right;margin-left:auto;margin-bottom:20px;">
-        <h1 style="color:white;text-align:right;font-size:24px;">🔖 Web Content Manager</h1>
-        <p style="color:white;text-align:right;font-size:14px;">Save, organize and rediscover your web treasures</p>
-        <img src="data:image/png;base64,{get_image_base64()}" style="width:100%;border-radius:10px;margin-top:10px;">
-    </div>
-    """
-    st.markdown(header_html, unsafe_allow_html=True)
+    """Display simple heading with a beautiful image next to it"""
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.title("🔖 Web Content Manager")
+        st.markdown("Save, organize, and rediscover your web treasures", unsafe_allow_html=True)
+    with col2:
+        # Beautiful image from Unsplash (web-themed)
+        st.image(
+            "https://images.unsplash.com/photo-1516321310762-7d873c39f35e?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&h=200&q=80",
+            caption="",
+            use_column_width=True
+        )
+    st.markdown("<hr>", unsafe_allow_html=True)  # Horizontal line for separation
 
 def fetch_metadata(url):
     """Get page metadata with error handling"""
@@ -124,19 +116,6 @@ def fetch_metadata(url):
         st.warning(f"Couldn't fetch metadata: {str(e)}")
         logging.warning(f"Metadata fetch failed: {str(e)}")
         return url, ""
-
-def load_model():
-    """Load sentence transformer model with error handling (kept for potential future use)"""
-    try:
-        logging.info("Loading SentenceTransformer model...")
-        model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
-        logging.info("Model loaded successfully")
-        return model
-    except Exception as e:
-        st.error(f"Model loading failed: {str(e)}")
-        logging.error(f"Model loading failed: {str(e)}")
-        st.info("Please ensure all requirements are installed and try again")
-        return None
 
 def add_link_section(df, excel_file):
     """Section for adding new links"""
@@ -211,17 +190,15 @@ def main():
     with st.expander("ℹ️ About this app", expanded=False):
         st.write("""
         **Web Content Manager** helps you save and organize web links with:
-        - AI-powered tagging and search
+        - Easy link saving and tagging
         - Visual bookmark management
-        - Semantic content analysis
-        - Beautiful intuitive interface
+        - Simple and intuitive interface
         
         Get started by selecting an option from the sidebar!
         """)
     
     # Initialize components
     df, excel_file = init_data()
-    model = load_model()  # Kept for potential future use
     
     if df is None or excel_file is None:
         return
