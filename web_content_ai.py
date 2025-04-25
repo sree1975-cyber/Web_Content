@@ -8,7 +8,6 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from streamlit_option_menu import option_menu
-from streamlit_tags import st_tags
 import logging
 import os
 from html import escape
@@ -67,21 +66,6 @@ st.markdown("""
         background-color: #ff4b4b !important;
         color: white !important;
         margin-top: 0.5rem;
-    }
-    
-    /* Help icon styling */
-    .help-icon {
-        cursor: pointer;
-        color: #4f46e5;
-        font-size: 1rem;
-        margin-left: 0.5rem;
-        text-decoration: none;
-    }
-    
-    /* Search bar active state */
-    .search-active {
-        border: 2px solid #4f46e5;
-        border-radius: 5px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -271,19 +255,34 @@ def add_link_section(df, excel_file):
             help="Add notes about why this link is important"
         )
         
-        # Smart tags with validation
+        # Get all unique tags from DataFrame
+        all_tags = sorted({str(tag).strip() for sublist in df['tags'] 
+                         for tag in (sublist if isinstance(sublist, list) else []) 
+                         if str(tag).strip()})
+        # Add suggested tags from metadata
         suggested_tags = st.session_state.get('suggested_tags', []) + \
                        ['research', 'tutorial', 'news', 'tool', 'inspiration']
-        suggested_tags = [str(tag).strip() for tag in suggested_tags if str(tag).strip()]
+        all_tags = sorted(list(set(all_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
         
-        st.markdown("**Tags:** (Press Enter after each tag)<span class='help-icon' title='Use descriptive tags to categorize your link. Example: For a Python tutorial, use tags like \"python\", \"tutorial\", \"programming\".'>❓</span>", unsafe_allow_html=True)
-        tags = st_tags(
-            label='',
-            text='Add a tag and press Enter',
-            value=[],
-            suggestions=list(set(suggested_tags)),
-            key="tags_input"
+        # Select existing tags
+        selected_tags = st.multiselect(
+            "Tags",
+            options=all_tags,
+            default=[],
+            help="Select existing tags or add new ones below. Example: For a Python tutorial, use tags like 'python', 'tutorial', 'programming'.",
+            key="existing_tags"
         )
+        
+        # Add new tag
+        new_tag = st.text_input(
+            "Add New Tag (optional)",
+            placeholder="Type a new tag and press Enter",
+            help="Enter a new tag to add to the selected tags",
+            key="new_tag"
+        )
+        
+        # Combine selected and new tags
+        tags = selected_tags + ([new_tag.strip()] if new_tag.strip() else [])
         
         submitted = st.form_submit_button("💾 Save Link")
         
@@ -297,10 +296,9 @@ def add_link_section(df, excel_file):
                 df, action = save_link(df, url, title, description, tags)
                 if action:
                     if save_data(df, excel_file):
-                        st.session_state['df'] = df  # Update session state
+                        st.session_state['df'] = df
                         st.success(f"✅ Link {action} successfully!")
                         st.balloons()
-                        # Clear auto-filled fields
                         for key in ['auto_title', 'auto_description', 'suggested_tags', 'url_input']:
                             if key in st.session_state:
                                 del st.session_state[key]
@@ -319,28 +317,34 @@ def browse_section(df, excel_file):
         st.info("✨ No links saved yet. Add your first link to get started!")
         return
     
-    # Powerful search functionality
-    search_col, tag_col = st.columns([3, 1])
-    with search_col:
-        search_query = st.text_input(
-            "Search content",
-            placeholder="Search by title, URL, description, or tags",
-            key="search_query",
-            help="Enter words to filter links (e.g., part of title or tag)"
-        )
-        if search_query:
-            st.markdown(f"<small>Searching for: <strong>{escape(search_query)}</strong></small>", unsafe_allow_html=True)
-    with tag_col:
-        # Get all unique tags
-        all_tags = sorted({str(tag).strip() for sublist in df['tags'] 
-                         for tag in (sublist if isinstance(sublist, list) else []) 
-                         if str(tag).strip()})
-        selected_tags = st.multiselect("Filter by tags", options=all_tags, key="tag_filter")
+    # Search form to control re-renders
+    with st.form("search_form"):
+        search_col, tag_col = st.columns([3, 1])
+        with search_col:
+            search_query = st.text_input(
+                "Search content",
+                placeholder="Search by title, URL, description, or tags",
+                key="search_query",
+                help="Enter words to filter links (e.g., part of title or tag)"
+            )
+        with tag_col:
+            # Get all unique tags
+            all_tags = sorted({str(tag).strip() for sublist in df['tags'] 
+                             for tag in (sublist if isinstance(sublist, list) else []) 
+                             if str(tag).strip()})
+            selected_tags = st.multiselect(
+                "Filter by tags",
+                options=all_tags,
+                key="tag_filter",
+                help="Select tags to filter links"
+            )
+        
+        submitted = st.form_submit_button("🔍 Search")
     
     # Apply search filters
     filtered_df = df.copy()
     
-    if search_query:
+    if search_query or submitted:
         logging.debug(f"Applying search query: {search_query}")
         search_lower = search_query.lower()
         try:
@@ -373,10 +377,8 @@ def browse_section(df, excel_file):
     
     if filtered_df.empty:
         st.warning("No links match your search criteria")
-        return
-    
-    # Display number of results
-    st.markdown(f"<small>Found <strong>{len(filtered_df)}</strong> link(s)</small>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<small>Found <strong>{len(filtered_df)}</strong> link(s)</small>", unsafe_allow_html=True)
     
     # Initialize session state for selected links
     if 'selected_urls' not in st.session_state:
@@ -406,7 +408,8 @@ def browse_section(df, excel_file):
                 "tags": "Tags",
                 "created_at": "Date Added"
             },
-            disabled=['title', 'url', 'description', 'tags', 'created_at']  # Only allow editing 'Select'
+            disabled=['title', 'url', 'description', 'tags', 'created_at'],
+            key="data_editor"
         )
         
         # Update selected_urls based on checkbox changes
@@ -416,7 +419,7 @@ def browse_section(df, excel_file):
         if st.session_state.selected_urls:
             if st.button("🗑️ Delete Selected Links", key="delete_selected"):
                 df = delete_selected_links(df, excel_file, st.session_state.selected_urls)
-                st.session_state.selected_urls = []  # Clear selections
+                st.session_state.selected_urls = []
                 st.rerun()
 
 def format_tags(tags):
