@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-WEB CONTENT MANAGER - Enhanced Version with Owner Mode and Persistent Storage
+WEB CONTENT MANAGER - Enhanced Version with Public Sharing and Form Clearing
 """
 import streamlit as st
 import pandas as pd
@@ -67,7 +67,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def init_data():
-    """Initialize or load Excel files for public links"""
+    """Initialize or load Excel files for public and user links"""
     public_excel_file = 'public_links.xlsx'
     try:
         if os.path.exists(public_excel_file):
@@ -123,6 +123,7 @@ def save_link(df, url, title, description, tags, source='User'):
         logging.debug(f"Saving link: URL={url}, Title={title}, Description={description}, Tags={tags}, Source={source}")
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
+        # Check for duplicate URL
         existing_index = df[df['url'] == url].index
         
         if not existing_index.empty:
@@ -156,35 +157,30 @@ def save_link(df, url, title, description, tags, source='User'):
         logging.error(f"Link save failed: {str(e)}")
         return df, None
 
-def delete_selected_links(public_df, user_df, public_excel_file, selected_urls, owner_mode):
-    """Delete selected links from the appropriate DataFrame"""
+def delete_selected_links(df, excel_file, selected_urls):
+    """Delete selected links from the DataFrame"""
     try:
-        logging.debug(f"Deleting URLs: {selected_urls}, Owner Mode: {owner_mode}")
+        logging.debug(f"Deleting URLs: {selected_urls}")
         if not selected_urls:
             st.warning("No links selected for deletion")
-            return public_df, user_df
-        
-        if owner_mode:
-            # Owner can delete from both public and user DataFrames
-            public_df = public_df[~public_df['url'].isin(selected_urls)]
-            user_df = user_df[~user_df['url'].isin(selected_urls)]
-            # Save public_df changes to file
-            if public_df['source'].eq('Public').any():
-                if not save_data(public_df, public_excel_file):
-                    st.error("Failed to save public links after deletion")
+            return df
+        # Only delete user links, not public ones
+        df = df[~(df['url'].isin(selected_urls) & (df['source'] == 'User'))]
+        if df['source'].eq('User').any():
+            if save_data(df[df['source'] == 'User'], excel_file):
+                st.session_state['user_df'] = df[df['source'] == 'User']
+                st.success(f"✅ {len(selected_urls)} link(s) deleted successfully!")
+                st.balloons()
+            else:
+                st.error("Failed to save changes after deletion")
         else:
-            # Public users can only delete from user_df
-            user_df = user_df[~user_df['url'].isin(selected_urls)]
-        
-        st.session_state['public_df'] = public_df
-        st.session_state['user_df'] = user_df
-        st.success(f"✅ {len(selected_urls)} link(s) deleted successfully!")
-        st.balloons()
-        return public_df, user_df
+            st.session_state['user_df'] = df[df['source'] == 'User']
+            st.success(f"✅ {len(selected_urls)} link(s) deleted successfully!")
+        return df
     except Exception as e:
         st.error(f"Error deleting links: {str(e)}")
         logging.error(f"Delete links failed: {str(e)}")
-        return public_df, user_df
+        return df
 
 def display_header():
     """Display beautiful header"""
@@ -216,7 +212,7 @@ def fetch_metadata(url):
         st.warning(f"Couldn't fetch metadata: {str(e)}")
         return url, "", []
 
-def add_link_section(public_df, public_excel_file, owner_mode):
+def add_link_section(public_df, public_excel_file):
     """Section for adding new links with working Fetch button"""
     st.markdown("### 🌐 Add New Web Content")
     
@@ -245,6 +241,7 @@ def add_link_section(public_df, public_excel_file, owner_mode):
             st.session_state['auto_title'] = title
             st.session_state['auto_description'] = description
             st.session_state['suggested_tags'] = keywords
+            st.rerun()
     
     with st.form("add_link_form", clear_on_submit=True):
         title = st.text_input(
@@ -293,46 +290,28 @@ def add_link_section(public_df, public_excel_file, owner_mode):
         submitted = st.form_submit_button("💾 Save Link")
         
         if submitted:
-            logging.debug(f"Form submitted: URL={url}, Title={title}, Description={description}, Tags={tags}, Owner Mode={owner_mode}")
+            logging.debug(f"Form submitted: URL={url}, Title={title}, Description={description}, Tags={tags}")
             if not url:
                 st.error("Please enter a URL")
             elif not title:
                 st.error("Please enter a title")
             else:
-                if owner_mode:
-                    # Save to public_df and public_links.xlsx
-                    public_df, action = save_link(public_df, url, title, description, tags, source='Public')
-                    if action:
-                        if save_data(public_df, public_excel_file):
-                            st.session_state['public_df'] = public_df
-                            st.success(f"✅ Link {action} successfully!")
-                            st.balloons()
-                            # Clear session state
-                            for key in ['url_input', 'auto_title', 'auto_description', 'suggested_tags', 
-                                      'title_input', 'description_input', 'existing_tags', 'new_tag']:
-                                if key in st.session_state:
-                                    del st.session_state[key]
-                        else:
-                            st.error("Failed to save link to public Excel file")
-                    else:
-                        st.error("Failed to process link")
+                user_df, action = save_link(user_df, url, title, description, tags, source='User')
+                if action:
+                    st.session_state['user_df'] = user_df
+                    st.success(f"✅ Link {action} successfully!")
+                    st.balloons()
+                    # Clear all session state and widget states
+                    for key in ['url_input', 'auto_title', 'auto_description', 'suggested_tags', 
+                              'title_input', 'description_input', 'existing_tags', 'new_tag']:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    st.rerun()
                 else:
-                    # Save to user_df
-                    user_df, action = save_link(user_df, url, title, description, tags, source='User')
-                    if action:
-                        st.session_state['user_df'] = user_df
-                        st.success(f"✅ Link {action} successfully!")
-                        st.balloons()
-                        # Clear session state
-                        for key in ['url_input', 'auto_title', 'auto_description', 'suggested_tags', 
-                                  'title_input', 'description_input', 'existing_tags', 'new_tag']:
-                            if key in st.session_state:
-                                del st.session_state[key]
-                    else:
-                        st.error("Failed to process link")
+                    st.error("Failed to process link")
     
-    # Download user links (public users only)
-    if not owner_mode and not user_df.empty:
+    # Download user links
+    if not user_df.empty:
         user_csv = user_df.drop(columns=['source']).to_csv(index=False).encode('utf-8')
         st.download_button(
             label="Download Your Links as CSV",
@@ -343,9 +322,9 @@ def add_link_section(public_df, public_excel_file, owner_mode):
             key="download_user_csv"
         )
     
-    return public_df, user_df
+    return public_df
 
-def browse_section(public_df, public_excel_file, owner_mode):
+def browse_section(public_df, public_excel_file):
     """Section for browsing saved links with powerful search and delete functionality"""
     st.markdown("### 📚 Browse Saved Links")
     
@@ -354,6 +333,7 @@ def browse_section(public_df, public_excel_file, owner_mode):
         'created_at', 'updated_at', 'source'
     ]))
     
+    # Combine public and user DataFrames
     combined_df = pd.concat([public_df, user_df], ignore_index=True)
     
     if combined_df.empty:
@@ -430,15 +410,14 @@ def browse_section(public_df, public_excel_file, owner_mode):
         
         display_df['Select'] = [False] * len(display_df)
         for i, row in display_df.iterrows():
-            display_df.at[i, 'Select'] = row['url'] in st.session_state.selected_urls and \
-                                       (owner_mode or row['source'] == 'User')
+            display_df.at[i, 'Select'] = row['url'] in st.session_state.selected_urls and row['source'] == 'User'
         
         edited_df = st.data_editor(
             display_df[['Select', 'source', 'title', 'url', 'description', 'tags', 'created_at']],
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Select": st.column_config.CheckboxColumn("Select", help="Select links to delete (public links editable in Owner Mode)"),
+                "Select": st.column_config.CheckboxColumn("Select", help="Select your links to delete (public links are read-only)"),
                 "source": "Source",
                 "title": "Title",
                 "url": st.column_config.LinkColumn("URL"),
@@ -454,11 +433,10 @@ def browse_section(public_df, public_excel_file, owner_mode):
         
         if st.session_state.selected_urls:
             if st.button("🗑️ Delete Selected Links", key="delete_selected"):
-                public_df, user_df = delete_selected_links(
-                    public_df, user_df, public_excel_file, st.session_state.selected_urls, owner_mode)
-                st.session_state['public_df'] = public_df
-                st.session_state['user_df'] = user_df
+                combined_df = delete_selected_links(combined_df, public_excel_file, st.session_state.selected_urls)
+                st.session_state['user_df'] = combined_df[combined_df['source'] == 'User']
                 st.session_state.selected_urls = []
+                st.rerun()
 
 def format_tags(tags):
     """Format tags as pretty pills"""
@@ -478,7 +456,7 @@ def format_tags(tags):
             """)
     return "".join(html_tags)
 
-def download_section(public_df, public_excel_file, owner_mode):
+def download_section(public_df, public_excel_file):
     """Section for downloading data"""
     st.markdown("### 📥 Export Your Links")
     
@@ -509,7 +487,7 @@ def download_section(public_df, public_excel_file, owner_mode):
                         key="download_public_excel"
                     )
         with col2:
-            if not user_df.empty and not owner_mode:
+            if not user_df.empty:
                 user_csv = user_df.drop(columns=['source']).to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="Download Your Links (CSV)",
@@ -537,15 +515,29 @@ def main():
         public_df = st.session_state['public_df']
         public_excel_file = st.session_state['public_excel_file']
     
-    # Owner Mode toggle
+    with st.expander("ℹ️ About Web Content Manager", expanded=False):
+        st.markdown("""
+        <div style="padding: 1rem;">
+            <h3>Your Personal Web Library</h3>
+            <p>Web Content Manager helps you save and organize web links with:</p>
+            <ul>
+                <li>📌 One-click saving of important web resources</li>
+                <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
+                <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
+                <li>🗑️ <strong>Delete functionality</strong> - Remove your links (public links are read-only)</li>
+                <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
+                <li>📥 <strong>Export capability</strong> - Download your collection or the public collection</li>
+                <li>💾 <strong>Persistent storage</strong> - Your data is saved in session and exportable</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
     with st.sidebar:
         st.markdown("""
         <div style="padding: 1rem;">
             <h2 style="margin-bottom: 1.5rem;">Navigation</h2>
         </div>
         """, unsafe_allow_html=True)
-        
-        owner_mode = st.checkbox("Owner Mode", help="Enable to save links persistently and edit public links")
         
         selected = option_menu(
             menu_title=None,
@@ -560,31 +552,13 @@ def main():
             }
         )
     
-    with st.expander("ℹ️ About Web Content Manager", expanded=False):
-        st.markdown("""
-        <div style="padding: 1rem;">
-            <h3>Your Personal Web Library</h3>
-            <p>Web Content Manager helps you save and organize web links with:</p>
-            <ul>
-                <li>📌 One-click saving of important web resources</li>
-                <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
-                <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
-                <li>🗑️ <strong>Delete functionality</strong> - Remove your links (public links editable in Owner Mode)</li>
-                <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
-                <li>📥 <strong>Export capability</strong> - Download your collection or the public collection</li>
-                <li>💾 <strong>Persistent storage</strong> - Owner links saved permanently; public user links exportable</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
     if selected == "Add Link":
-        public_df, user_df = add_link_section(public_df, public_excel_file, owner_mode)
-        st.session_state['public_df'] = public_df
-        st.session_state['user_df'] = user_df
+        updated_public_df = add_link_section(public_df, public_excel_file)
+        st.session_state['public_df'] = updated_public_df
     elif selected == "Browse Links":
-        browse_section(public_df, public_excel_file, owner_mode)
+        browse_section(public_df, public_excel_file)
     elif selected == "Export Data":
-        download_section(public_df, public_excel_file, owner_mode)
+        download_section(public_df, public_excel_file)
 
 if __name__ == "__main__":
     main()
