@@ -1,7 +1,7 @@
 streamlit
 sqlite3==2.6.0
 requests==2.31.0
-beautifulsoup4
+beautifulsoup4==4.10.0
 numpy==1.26.0
 sentence-transformers==2.2.2
 Pillow==10.0.0
