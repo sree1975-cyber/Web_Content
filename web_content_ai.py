@@ -255,13 +255,14 @@ def add_link_section(df, excel_file):
         suggested_tags = [str(tag).strip() for tag in suggested_tags if str(tag).strip()]
         
         #st.markdown("**Tags:** (Press Enter after each tag)<span class='help-icon' title='Use descriptive tags to categorize your link. Example: For a Python tutorial, use tags like \"python\", \"tutorial\", \"programming\".'>❓</span>", unsafe_allow_html=True)
+        help="Use descriptive tags to categorize your link. Example: For a Python tutorial, use tags like \"python\", \"tutorial\", \"programming\"
         tags = st_tags(
             label='',
             text='Add a tag and press Enter',
             value=[],
             suggestions=list(set(suggested_tags)),
             key="tags_input"
-            help="Use descriptive tags to categorize your link. Example: For a Python tutorial, use tags like \"python\", \"tutorial\", \"programming\"
+            
         )
         
         submitted = st.form_submit_button("💾 Save Link")
