@@ -32,7 +32,7 @@ st.set_page_config(
 # Helper functions
 def get_image_base64():
     """Return base64 encoded placeholder image"""
-    img = Image.new('RGB', (800, 400), color='#4b8bbe')
+    img = Image.new('RGB', (400, 200), color='#4b8bbe')  # Reduced size
     buffered = io.BytesIO()
     img.save(buffered, format="PNG")
     return base64.b64encode(buffered.getvalue()).decode()
@@ -47,7 +47,7 @@ def init_data():
         else:
             df = pd.DataFrame(columns=[
                 'id', 'url', 'title', 'description', 'tags', 
-                'created_at', 'updated_at', 'embedding'
+                'created_at', 'updated_at'
             ])
             df.to_excel(excel_file, index=False, engine='openpyxl')
             logging.info("Created new Excel file")
@@ -57,17 +57,13 @@ def init_data():
         logging.error(f"Failed to initialize Excel file: {str(e)}")
         return None, None
 
-def save_link(df, excel_file, url, title, description, tags, model):
+def save_link(df, excel_file, url, title, description, tags):
     """Save link to Excel file"""
     try:
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         # Check if URL already exists
         if url in df['url'].values:
             df = df[df['url'] != url]  # Remove existing entry
-        
-        # Generate embedding
-        text_to_embed = f"{title} {description}"
-        embedding = model.encode(text_to_embed).tobytes()
         
         # Create new entry
         new_id = df['id'].max() + 1 if not df.empty else 1
@@ -78,8 +74,7 @@ def save_link(df, excel_file, url, title, description, tags, model):
             'description': description,
             'tags': ','.join(tags),
             'created_at': now,
-            'updated_at': now,
-            'embedding': embedding
+            'updated_at': now
         }])
         
         # Append and save to Excel
@@ -103,11 +98,11 @@ def save_link(df, excel_file, url, title, description, tags, model):
         return df
 
 def display_header():
-    """Display beautiful header with AI image"""
+    """Display header aligned to the right with smaller image"""
     header_html = f"""
-    <div style="background-color:#4b8bbe;padding:10px;border-radius:10px">
-        <h1 style="color:white;text-align:center;">🔖 Web Content Manager</h1>
-        <p style="color:white;text-align:center;">Save, organize and rediscover your web treasures</p>
+    <div style="background-color:#4b8bbe;padding:10px;border-radius:10px;width:50%;float:right;margin-left:auto;margin-bottom:20px;">
+        <h1 style="color:white;text-align:right;font-size:24px;">🔖 Web Content Manager</h1>
+        <p style="color:white;text-align:right;font-size:14px;">Save, organize and rediscover your web treasures</p>
         <img src="data:image/png;base64,{get_image_base64()}" style="width:100%;border-radius:10px;margin-top:10px;">
     </div>
     """
@@ -131,7 +126,7 @@ def fetch_metadata(url):
         return url, ""
 
 def load_model():
-    """Load sentence transformer model with error handling"""
+    """Load sentence transformer model with error handling (kept for potential future use)"""
     try:
         logging.info("Loading SentenceTransformer model...")
         model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
@@ -143,7 +138,7 @@ def load_model():
         st.info("Please ensure all requirements are installed and try again")
         return None
 
-def add_link_section(df, excel_file, model):
+def add_link_section(df, excel_file):
     """Section for adding new links"""
     st.subheader("🌐 Add New Web Content")
     
@@ -170,7 +165,7 @@ def add_link_section(df, excel_file, model):
     )
     
     if st.button("💾 Save Link", disabled=not url):
-        updated_df = save_link(df, excel_file, url, title, description, tags, model)
+        updated_df = save_link(df, excel_file, url, title, description, tags)
         return updated_df
     return df
 
@@ -226,9 +221,9 @@ def main():
     
     # Initialize components
     df, excel_file = init_data()
-    model = load_model()
+    model = load_model()  # Kept for potential future use
     
-    if df is None or excel_file is None or model is None:
+    if df is None or excel_file is None:
         return
     
     # Sidebar navigation
@@ -242,7 +237,7 @@ def main():
     
     # Render selected section
     if selected == "Add Link":
-        updated_df = add_link_section(df, excel_file, model)
+        updated_df = add_link_section(df, excel_file)
         st.session_state['df'] = updated_df  # Update session state
     elif selected == "Browse":
         browse_section(st.session_state.get('df', df))
