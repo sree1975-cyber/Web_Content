@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-WEB CONTENT MANAGER - Enhanced Version with All Features
+WEB CONTENT MANAGER - Enhanced Version with Public Sharing and Form Clearing
 """
 import streamlit as st
 import pandas as pd
@@ -26,7 +26,6 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
-    /* Main styles */
     .header {
         background: linear-gradient(135deg, #6e8efb, #a777e3);
         color: white;
@@ -44,12 +43,10 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
     
-    /* Dataframe styling */
     .dataframe {
         width: 100%;
     }
     
-    /* Tag styling */
     .tag {
         display: inline-block;
         background: #e0e7ff;
@@ -61,7 +58,6 @@ st.markdown("""
         margin-bottom: 0.3rem;
     }
     
-    /* Delete button styling */
     .delete-btn {
         background-color: #ff4b4b !important;
         color: white !important;
@@ -71,41 +67,40 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def init_data():
-    """Initialize or load Excel file for storing links"""
-    excel_file = 'web_links.xlsx'
+    """Initialize or load Excel files for public and user links"""
+    public_excel_file = 'public_links.xlsx'
     try:
-        if os.path.exists(excel_file):
-            df = pd.read_excel(excel_file, engine='openpyxl')
-            # Convert tags from string to list
+        if os.path.exists(public_excel_file):
+            df = pd.read_excel(public_excel_file, engine='openpyxl')
             if 'tags' in df.columns:
                 df['tags'] = df['tags'].apply(lambda x: x.split(',') if isinstance(x, str) else [] if pd.isna(x) else x)
-            # Ensure string types
             for col in ['title', 'url', 'description']:
                 if col in df.columns:
                     df[col] = df[col].astype(str).replace('nan', '')
-            logging.info("Loaded existing Excel file")
+            df['source'] = 'Public'
+            logging.info("Loaded public Excel file")
         else:
             df = pd.DataFrame(columns=[
                 'id', 'url', 'title', 'description', 'tags', 
-                'created_at', 'updated_at'
+                'created_at', 'updated_at', 'source'
             ])
-            logging.info("Created new Excel file")
-        return df, excel_file
+            logging.info("Created empty public Excel file")
+        return df, public_excel_file
     except Exception as e:
-        st.error(f"Failed to initialize data: {str(e)}")
-        logging.error(f"Data initialization failed: {str(e)}")
-        return pd.DataFrame(), excel_file
+        st.error(f"Failed to initialize public data: {str(e)}")
+        logging.error(f"Public data initialization failed: {str(e)}")
+        return pd.DataFrame(), public_excel_file
 
 def save_data(df, excel_file):
     """Save DataFrame to Excel file"""
     try:
         logging.debug(f"Saving DataFrame to {excel_file}: {df.to_dict()}")
-        # Convert tags from list to string before saving
         df_to_save = df.copy()
         if 'tags' in df_to_save.columns:
             df_to_save['tags'] = df_to_save['tags'].apply(lambda x: ','.join(map(str, x)) if isinstance(x, list) else '')
+        if 'source' in df_to_save.columns:
+            df_to_save = df_to_save.drop(columns=['source'])
         
-        # Check write permissions
         if os.path.exists(excel_file):
             if not os.access(excel_file, os.W_OK):
                 raise PermissionError(f"No write permission for {excel_file}")
@@ -122,25 +117,25 @@ def save_data(df, excel_file):
         logging.error(f"Data save failed: {str(e)}")
         return False
 
-def save_link(df, url, title, description, tags):
+def save_link(df, url, title, description, tags, source='User'):
     """Save or update a link in the DataFrame"""
     try:
-        logging.debug(f"Saving link: URL={url}, Title={title}, Description={description}, Tags={tags}")
+        logging.debug(f"Saving link: URL={url}, Title={title}, Description={description}, Tags={tags}, Source={source}")
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # Check if URL already exists
+        # Check for duplicate URL
         existing_index = df[df['url'] == url].index
         
         if not existing_index.empty:
-            # Update existing entry
+            st.warning(f"URL already exists: {url}. Updating existing entry.")
             idx = existing_index[0]
             df.at[idx, 'title'] = title
             df.at[idx, 'description'] = description if description else ""
             df.at[idx, 'tags'] = [str(tag).strip() for tag in tags if str(tag).strip()]
             df.at[idx, 'updated_at'] = now
+            df.at[idx, 'source'] = source
             action = "updated"
         else:
-            # Create new entry
             new_id = df['id'].max() + 1 if not df.empty else 1
             new_entry = {
                 'id': new_id,
@@ -149,7 +144,8 @@ def save_link(df, url, title, description, tags):
                 'description': description if description else "",
                 'tags': [str(tag).strip() for tag in tags if str(tag).strip()],
                 'created_at': now,
-                'updated_at': now
+                'updated_at': now,
+                'source': source
             }
             df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
             action = "saved"
@@ -168,13 +164,18 @@ def delete_selected_links(df, excel_file, selected_urls):
         if not selected_urls:
             st.warning("No links selected for deletion")
             return df
-        df = df[~df['url'].isin(selected_urls)]
-        if save_data(df, excel_file):
-            st.session_state['df'] = df
-            st.success(f"✅ {len(selected_urls)} link(s) deleted successfully!")
-            st.balloons()
+        # Only delete user links, not public ones
+        df = df[~(df['url'].isin(selected_urls) & (df['source'] == 'User'))]
+        if df['source'].eq('User').any():
+            if save_data(df[df['source'] == 'User'], excel_file):
+                st.session_state['user_df'] = df[df['source'] == 'User']
+                st.success(f"✅ {len(selected_urls)} link(s) deleted successfully!")
+                st.balloons()
+            else:
+                st.error("Failed to save changes after deletion")
         else:
-            st.error("Failed to save changes after deletion")
+            st.session_state['user_df'] = df[df['source'] == 'User']
+            st.success(f"✅ {len(selected_urls)} link(s) deleted successfully!")
         return df
     except Exception as e:
         st.error(f"Error deleting links: {str(e)}")
@@ -203,7 +204,6 @@ def fetch_metadata(url):
         description = soup.find('meta', attrs={'name': 'description'})
         description = description['content'] if description else ""
         
-        # Try to get keywords if available
         keywords = soup.find('meta', attrs={'name': 'keywords'})
         keywords = keywords['content'].split(',')[:5] if keywords else []
         
@@ -212,15 +212,20 @@ def fetch_metadata(url):
         st.warning(f"Couldn't fetch metadata: {str(e)}")
         return url, "", []
 
-def add_link_section(df, excel_file):
+def add_link_section(public_df, public_excel_file):
     """Section for adding new links with working Fetch button"""
     st.markdown("### 🌐 Add New Web Content")
     
-    # Use session state to track URL changes
-    if 'url_input' not in st.session_state:
-        st.session_state.url_input = ""
+    # Initialize user DataFrame in session state
+    if 'user_df' not in st.session_state:
+        st.session_state['user_df'] = pd.DataFrame(columns=[
+            'id', 'url', 'title', 'description', 'tags', 
+            'created_at', 'updated_at', 'source'
+        ])
     
-    # URL input (outside form to allow real-time changes)
+    user_df = st.session_state['user_df']
+    
+    # URL input
     url = st.text_input(
         "URL*", 
         placeholder="https://example.com",
@@ -228,11 +233,9 @@ def add_link_section(df, excel_file):
         help="Enter the full URL including https://"
     )
     
-    # Check if URL is non-empty and valid (basic check)
     is_url_valid = url.startswith(("http://", "https://")) if url else False
     
-    # Fetch button (now enabled only if URL is valid)
-    if st.button("Fetch Metadata", disabled=not is_url_valid):
+    if st.button("Fetch Metadata", disabled=not is_url_valid, key="fetch_metadata"):
         with st.spinner("Fetching..."):
             title, description, keywords = fetch_metadata(url)
             st.session_state['auto_title'] = title
@@ -240,31 +243,33 @@ def add_link_section(df, excel_file):
             st.session_state['suggested_tags'] = keywords
             st.rerun()
     
-    # The rest of the form
     with st.form("add_link_form", clear_on_submit=True):
         title = st.text_input(
             "Title*", 
             value=st.session_state.get('auto_title', ''),
-            help="Give your link a descriptive title"
+            help="Give your link a descriptive title",
+            key="title_input"
         )
         
         description = st.text_area(
             "Description", 
             value=st.session_state.get('auto_description', ''),
             height=100,
-            help="Add notes about why this link is important"
+            help="Add notes about why this link is important",
+            key="description_input"
         )
         
-        # Get all unique tags from DataFrame
-        all_tags = sorted({str(tag).strip() for sublist in df['tags'] 
+        # Get all unique tags from public and user DataFrames
+        all_tags = sorted({str(tag).strip() for sublist in public_df['tags'] 
                          for tag in (sublist if isinstance(sublist, list) else []) 
                          if str(tag).strip()})
-        # Add suggested tags from metadata
+        all_tags += sorted({str(tag).strip() for sublist in user_df['tags'] 
+                          for tag in (sublist if isinstance(sublist, list) else []) 
+                          if str(tag).strip()})
         suggested_tags = st.session_state.get('suggested_tags', []) + \
                        ['research', 'tutorial', 'news', 'tool', 'inspiration']
         all_tags = sorted(list(set(all_tags + [str(tag).strip() for tag in suggested_tags if str(tag).strip()])))
         
-        # Select existing tags
         selected_tags = st.multiselect(
             "Tags",
             options=all_tags,
@@ -273,7 +278,6 @@ def add_link_section(df, excel_file):
             key="existing_tags"
         )
         
-        # Add new tag
         new_tag = st.text_input(
             "Add New Tag (optional)",
             placeholder="Type a new tag and press Enter",
@@ -281,7 +285,6 @@ def add_link_section(df, excel_file):
             key="new_tag"
         )
         
-        # Combine selected and new tags
         tags = selected_tags + ([new_tag.strip()] if new_tag.strip() else [])
         
         submitted = st.form_submit_button("💾 Save Link")
@@ -293,31 +296,50 @@ def add_link_section(df, excel_file):
             elif not title:
                 st.error("Please enter a title")
             else:
-                df, action = save_link(df, url, title, description, tags)
+                user_df, action = save_link(user_df, url, title, description, tags, source='User')
                 if action:
-                    if save_data(df, excel_file):
-                        st.session_state['df'] = df
-                        st.success(f"✅ Link {action} successfully!")
-                        st.balloons()
-                        for key in ['auto_title', 'auto_description', 'suggested_tags', 'url_input']:
-                            if key in st.session_state:
-                                del st.session_state[key]
-                    else:
-                        st.error("Failed to save link to Excel file")
+                    st.session_state['user_df'] = user_df
+                    st.success(f"✅ Link {action} successfully!")
+                    st.balloons()
+                    # Clear all session state and widget states
+                    for key in ['url_input', 'auto_title', 'auto_description', 'suggested_tags', 
+                              'title_input', 'description_input', 'existing_tags', 'new_tag']:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    st.rerun()
                 else:
                     st.error("Failed to process link")
     
-    return df
+    # Download user links
+    if not user_df.empty:
+        user_csv = user_df.drop(columns=['source']).to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Download Your Links as CSV",
+            data=user_csv,
+            file_name="user_links.csv",
+            mime="text/csv",
+            help="Download your saved links as a CSV file",
+            key="download_user_csv"
+        )
+    
+    return public_df
 
-def browse_section(df, excel_file):
+def browse_section(public_df, public_excel_file):
     """Section for browsing saved links with powerful search and delete functionality"""
     st.markdown("### 📚 Browse Saved Links")
     
-    if df.empty:
+    user_df = st.session_state.get('user_df', pd.DataFrame(columns=[
+        'id', 'url', 'title', 'description', 'tags', 
+        'created_at', 'updated_at', 'source'
+    ]))
+    
+    # Combine public and user DataFrames
+    combined_df = pd.concat([public_df, user_df], ignore_index=True)
+    
+    if combined_df.empty:
         st.info("✨ No links saved yet. Add your first link to get started!")
         return
     
-    # Search form to control re-renders
     with st.form("search_form"):
         search_col, tag_col = st.columns([3, 1])
         with search_col:
@@ -328,8 +350,7 @@ def browse_section(df, excel_file):
                 help="Enter words to filter links (e.g., part of title or tag)"
             )
         with tag_col:
-            # Get all unique tags
-            all_tags = sorted({str(tag).strip() for sublist in df['tags'] 
+            all_tags = sorted({str(tag).strip() for sublist in combined_df['tags'] 
                              for tag in (sublist if isinstance(sublist, list) else []) 
                              if str(tag).strip()})
             selected_tags = st.multiselect(
@@ -341,8 +362,7 @@ def browse_section(df, excel_file):
         
         submitted = st.form_submit_button("🔍 Search")
     
-    # Apply search filters
-    filtered_df = df.copy()
+    filtered_df = combined_df.copy()
     
     if search_query or submitted:
         logging.debug(f"Applying search query: {search_query}")
@@ -380,45 +400,41 @@ def browse_section(df, excel_file):
     else:
         st.markdown(f"<small>Found <strong>{len(filtered_df)}</strong> link(s)</small>", unsafe_allow_html=True)
     
-    # Initialize session state for selected links
     if 'selected_urls' not in st.session_state:
         st.session_state.selected_urls = []
 
-    # Display DataFrame view with checkbox column
     with st.expander("📊 View All Links as Data Table", expanded=True):
         display_df = filtered_df.copy()
         display_df['tags'] = display_df['tags'].apply(
             lambda x: ', '.join(str(tag) for tag in (x if isinstance(x, list) else [])))
         
-        # Add checkbox column for selection
         display_df['Select'] = [False] * len(display_df)
         for i, row in display_df.iterrows():
-            display_df.at[i, 'Select'] = row['url'] in st.session_state.selected_urls
+            display_df.at[i, 'Select'] = row['url'] in st.session_state.selected_urls and row['source'] == 'User'
         
-        # Render DataFrame with checkboxes
         edited_df = st.data_editor(
-            display_df[['Select', 'title', 'url', 'description', 'tags', 'created_at']],
+            display_df[['Select', 'source', 'title', 'url', 'description', 'tags', 'created_at']],
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Select": st.column_config.CheckboxColumn("Select", help="Select links to delete"),
+                "Select": st.column_config.CheckboxColumn("Select", help="Select your links to delete (public links are read-only)"),
+                "source": "Source",
                 "title": "Title",
                 "url": st.column_config.LinkColumn("URL"),
                 "description": "Description",
                 "tags": "Tags",
                 "created_at": "Date Added"
             },
-            disabled=['title', 'url', 'description', 'tags', 'created_at'],
+            disabled=['source', 'title', 'url', 'description', 'tags', 'created_at'],
             key="data_editor"
         )
         
-        # Update selected_urls based on checkbox changes
         st.session_state.selected_urls = edited_df[edited_df['Select']]['url'].tolist()
         
-        # Show Delete Selected button if any links are selected
         if st.session_state.selected_urls:
             if st.button("🗑️ Delete Selected Links", key="delete_selected"):
-                df = delete_selected_links(df, excel_file, st.session_state.selected_urls)
+                combined_df = delete_selected_links(combined_df, public_excel_file, st.session_state.selected_urls)
+                st.session_state['user_df'] = combined_df[combined_df['source'] == 'User']
                 st.session_state.selected_urls = []
                 st.rerun()
 
@@ -440,11 +456,13 @@ def format_tags(tags):
             """)
     return "".join(html_tags)
 
-def download_section(df, excel_file):
+def download_section(public_df, public_excel_file):
     """Section for downloading data"""
     st.markdown("### 📥 Export Your Links")
     
-    if df.empty:
+    user_df = st.session_state.get('user_df', pd.DataFrame())
+    
+    if user_df.empty and public_df.empty:
         st.warning("No links available to export")
         return
     
@@ -452,53 +470,51 @@ def download_section(df, excel_file):
         st.markdown("""
         <div class="card">
             <h3>Export Options</h3>
-            <p>Download your saved links in different formats</p>
+            <p>Download your saved links or the public collection</p>
         </div>
         """, unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
-            # Excel download
-            with open(excel_file, 'rb') as f:
-                st.download_button(
-                    label="Download Excel",
-                    data=f,
-                    file_name="web_links.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help="Download all links in Excel format"
-                )
+            if not public_df.empty:
+                with open(public_excel_file, 'rb') as f:
+                    st.download_button(
+                        label="Download Public Links (Excel)",
+                        data=f,
+                        file_name="public_links.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        help="Download the public collection of links",
+                        key="download_public_excel"
+                    )
         with col2:
-            # CSV download
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Download CSV",
-                data=csv,
-                file_name="web_links.csv",
-                mime="text/csv",
-                help="Download all links in CSV format"
-            )
+            if not user_df.empty:
+                user_csv = user_df.drop(columns=['source']).to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download Your Links (CSV)",
+                    data=user_csv,
+                    file_name="user_links.csv",
+                    mime="text/csv",
+                    help="Download your saved links as a CSV file",
+                    key="download_user_csv_section"
+                )
         
-        # Display stats
         st.markdown(f"""
         <div style="margin-top: 1rem;">
-            <p><strong>Stats:</strong> {len(df)} links saved | {len(set(tag for sublist in df['tags'] for tag in (sublist if isinstance(sublist, list) else [])))} unique tags</p>
+            <p><strong>Stats:</strong> {len(public_df)} public links | {len(user_df)} user links | {len(set(tag for sublist in pd.concat([public_df, user_df])['tags'] for tag in (sublist if isinstance(sublist, list) else [])))} unique tags</p>
         </div>
         """, unsafe_allow_html=True)
 
 def main():
-    # Display header
     display_header()
     
-    # Initialize data
-    if 'df' not in st.session_state:
-        df, excel_file = init_data()
-        st.session_state['df'] = df
-        st.session_state['excel_file'] = excel_file
+    if 'public_df' not in st.session_state:
+        public_df, public_excel_file = init_data()
+        st.session_state['public_df'] = public_df
+        st.session_state['public_excel_file'] = public_excel_file
     else:
-        df = st.session_state['df']
-        excel_file = st.session_state['excel_file']
+        public_df = st.session_state['public_df']
+        public_excel_file = st.session_state['public_excel_file']
     
-    # About section
     with st.expander("ℹ️ About Web Content Manager", expanded=False):
         st.markdown("""
         <div style="padding: 1rem;">
@@ -508,15 +524,14 @@ def main():
                 <li>📌 One-click saving of important web resources</li>
                 <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
                 <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
-                <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
+                <li>🗑️ <strong>Delete functionality</strong> - Remove your links (public links are read-only)</li>
                 <li>📊 <strong>Data Table View</strong> - See all links in a sortable, filterable table</li>
-                <li>📥 <strong>Export capability</strong> - Download your collection in Excel or CSV format</li>
-                <li>💾 <strong>Persistent storage</strong> - Your data is saved automatically and persists between sessions</li>
+                <li>📥 <strong>Export capability</strong> - Download your collection or the public collection</li>
+                <li>💾 <strong>Persistent storage</strong> - Your data is saved in session and exportable</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
     
-    # Sidebar navigation
     with st.sidebar:
         st.markdown("""
         <div style="padding: 1rem;">
@@ -537,14 +552,13 @@ def main():
             }
         )
     
-    # Render selected section
     if selected == "Add Link":
-        updated_df = add_link_section(df, excel_file)
-        st.session_state['df'] = updated_df
+        updated_public_df = add_link_section(public_df, public_excel_file)
+        st.session_state['public_df'] = updated_public_df
     elif selected == "Browse Links":
-        browse_section(df, excel_file)
+        browse_section(public_df, public_excel_file)
     elif selected == "Export Data":
-        download_section(df, excel_file)
+        download_section(public_df, public_excel_file)
 
 if __name__ == "__main__":
     main()
