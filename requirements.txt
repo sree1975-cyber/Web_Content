@@ -1,9 +1,11 @@
-streamlit==1.36.0  # Pin to a stable version compatible with other packages
+streamlit==1.31.1
 requests==2.31.0
-beautifulsoup4==4.12.0
-numpy==1.26.0
-sentence-transformers==2.7.0  # Consider upgrading if Python version causes conflicts
-Pillow==10.0.0
-python-dotenv==1.0.0
-streamlit-option-menu==0.3.6
-streamlit-tags==1.2.7
+beautifulsoup4==4.12.2
+numpy==1.26.4
+pillow==10.2.0
+sentence-transformers==2.7.0
+torch==2.3.0
+transformers==4.41.2
+scikit-learn==1.5.0
+streamlit-option-menu==0.3.12
+streamlit-tags==1.2.8
