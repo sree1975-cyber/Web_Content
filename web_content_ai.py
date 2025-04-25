@@ -68,6 +68,15 @@ st.markdown("""
         color: white !important;
         margin-top: 0.5rem;
     }
+    
+    /* Help icon styling */
+    .help-icon {
+        cursor: pointer;
+        color: #4f46e5;
+        font-size: 1rem;
+        margin-left: 0.5rem;
+        text-decoration: none;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -96,6 +105,7 @@ def init_data():
 def save_data(df, excel_file):
     """Save DataFrame to Excel file"""
     try:
+        logging.debug(f"Saving DataFrame to {excel_file}")
         # Convert tags from list to string before saving
         df_to_save = df.copy()
         if 'tags' in df_to_save.columns:
@@ -112,6 +122,7 @@ def save_data(df, excel_file):
 def save_link(df, url, title, description, tags):
     """Save or update a link in the DataFrame"""
     try:
+        logging.debug(f"Saving link: URL={url}, Title={title}, Tags={tags}")
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # Check if URL already exists
@@ -140,6 +151,7 @@ def save_link(df, url, title, description, tags):
             df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
             action = "saved"
         
+        logging.info(f"Link {action} successfully")
         return df, action
     except Exception as e:
         st.error(f"Error saving link: {str(e)}")
@@ -242,7 +254,7 @@ def add_link_section(df, excel_file):
                        ['research', 'tutorial', 'news', 'tool', 'inspiration']
         suggested_tags = [str(tag).strip() for tag in suggested_tags if str(tag).strip()]
         
-        st.markdown("**Tags:** (Press Enter after each tag)")
+        st.markdown("**Tags:** (Press Enter after each tag)<span class='help-icon' title='Use descriptive tags to categorize your link. Example: For a Python tutorial, use tags like \"python\", \"tutorial\", \"programming\".'>❓</span>", unsafe_allow_html=True)
         tags = st_tags(
             label='',
             text='Add a tag and press Enter',
@@ -254,6 +266,7 @@ def add_link_section(df, excel_file):
         submitted = st.form_submit_button("💾 Save Link")
         
         if submitted:
+            logging.debug(f"Form submitted: URL={url}, Title={title}, Tags={tags}")
             if not url:
                 st.error("Please enter a URL")
             elif not title:
@@ -262,14 +275,19 @@ def add_link_section(df, excel_file):
                 df, action = save_link(df, url, title, description, tags)
                 if action:
                     if save_data(df, excel_file):
+                        st.session_state['df'] = df  # Update session state
                         st.success(f"✅ Link {action} successfully!")
                         st.balloons()
                         # Clear auto-filled fields
-                        for key in ['auto_title', 'auto_description', 'suggested_tags']:
+                        for key in ['auto_title', 'auto_description', 'suggested_tags', 'url_input']:
                             if key in st.session_state:
                                 del st.session_state[key]
                         st.rerun()
-    
+                    else:
+                        st.error("Failed to save link to Excel file")
+                else:
+                    st.error("Failed to process link")
+
     return df
 
 def browse_section(df, excel_file):
@@ -376,7 +394,9 @@ def format_tags(tags):
     return "".join(html_tags)
 
 def download_section(df, excel_file):
-    """Section for downloading data"""
+    """Section for downloading data
+
+"""
     st.markdown("### 📥 Export Your Links")
     
     if df.empty:
