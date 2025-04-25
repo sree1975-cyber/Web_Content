@@ -213,9 +213,7 @@ def add_link_section(df, excel_file):
     # Check if URL is non-empty and valid (basic check)
     is_url_valid = url.startswith(("http://", "https://")) if url else False
     
-    # Fetch
-
- button (now enabled only if URL is valid)
+    # Fetch button (now enabled only if URL is valid)
     if st.button("Fetch Metadata", disabled=not is_url_valid):
         with st.spinner("Fetching..."):
             title, description, keywords = fetch_metadata(url)
