@@ -56,7 +56,7 @@ st.markdown("""
         background: #e0e7ff;
         color: #4f46e5;
         padding: 0.2rem 0.5rem;
-        border-radius: 1rem;
+                                     border-radius: 1rem;
         font-size: 0.8rem;
         margin-right: 0.5rem;
         margin-bottom: 0.3rem;
@@ -105,11 +105,20 @@ def init_data():
 def save_data(df, excel_file):
     """Save DataFrame to Excel file"""
     try:
-        logging.debug(f"Saving DataFrame to {excel_file}")
+        logging.debug(f"Saving DataFrame to {excel_file}: {df.to_dict()}")
         # Convert tags from list to string before saving
         df_to_save = df.copy()
         if 'tags' in df_to_save.columns:
             df_to_save['tags'] = df_to_save['tags'].apply(lambda x: ','.join(map(str, x)) if isinstance(x, list) else '')
+        
+        # Check write permissions
+        if os.path.exists(excel_file):
+            if not os.access(excel_file, os.W_OK):
+                raise PermissionError(f"No write permission for {excel_file}")
+        else:
+            directory = os.path.dirname(excel_file) or '.'
+            if not os.access(directory, os.W_OK):
+                raise PermissionError(f"No write permission for directory {directory}")
         
         df_to_save.to_excel(excel_file, index=False, engine='openpyxl')
         logging.info("Data saved successfully")
@@ -122,7 +131,7 @@ def save_data(df, excel_file):
 def save_link(df, url, title, description, tags):
     """Save or update a link in the DataFrame"""
     try:
-        logging.debug(f"Saving link: URL={url}, Title={title}, Tags={tags}")
+        logging.debug(f"Saving link: URL={url}, Title={title}, Description={description}, Tags={tags}")
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # Check if URL already exists
@@ -132,7 +141,7 @@ def save_link(df, url, title, description, tags):
             # Update existing entry
             idx = existing_index[0]
             df.at[idx, 'title'] = title
-            df.at[idx, 'description'] = description
+            df.at[idx, 'description'] = description if description else ""
             df.at[idx, 'tags'] = [str(tag).strip() for tag in tags if str(tag).strip()]
             df.at[idx, 'updated_at'] = now
             action = "updated"
@@ -143,7 +152,7 @@ def save_link(df, url, title, description, tags):
                 'id': new_id,
                 'url': url,
                 'title': title,
-                'description': description,
+                'description': description if description else "",
                 'tags': [str(tag).strip() for tag in tags if str(tag).strip()],
                 'created_at': now,
                 'updated_at': now
@@ -255,20 +264,18 @@ def add_link_section(df, excel_file):
         suggested_tags = [str(tag).strip() for tag in suggested_tags if str(tag).strip()]
         
         st.markdown("**Tags:** (Press Enter after each tag)<span class='help-icon' title='Use descriptive tags to categorize your link. Example: For a Python tutorial, use tags like \"python\", \"tutorial\", \"programming\".'>❓</span>", unsafe_allow_html=True)
-        #help="Use descriptive tags to categorize your link. Example: For a Python tutorial, use tags like \"python\", \"tutorial\", \"programming\"
         tags = st_tags(
             label='',
             text='Add a tag and press Enter',
             value=[],
             suggestions=list(set(suggested_tags)),
             key="tags_input"
-            
         )
         
         submitted = st.form_submit_button("💾 Save Link")
         
         if submitted:
-            logging.debug(f"Form submitted: URL={url}, Title={title}, Tags={tags}")
+            logging.debug(f"Form submitted: URL={url}, Title={title}, Description={description}, Tags={tags}")
             if not url:
                 st.error("Please enter a URL")
             elif not title:
@@ -284,12 +291,11 @@ def add_link_section(df, excel_file):
                         for key in ['auto_title', 'auto_description', 'suggested_tags', 'url_input']:
                             if key in st.session_state:
                                 del st.session_state[key]
-                        st.rerun()
                     else:
                         st.error("Failed to save link to Excel file")
                 else:
                     st.error("Failed to process link")
-
+    
     return df
 
 def browse_section(df, excel_file):
@@ -396,9 +402,7 @@ def format_tags(tags):
     return "".join(html_tags)
 
 def download_section(df, excel_file):
-    """Section for downloading data
-
-"""
+    """Section for downloading data"""
     st.markdown("### 📥 Export Your Links")
     
     if df.empty:
@@ -462,7 +466,7 @@ def main():
             <h3>Your Personal Web Library</h3>
             <p>Web Content Manager helps you save and organize web links with:</p>
             <ul>
-                <li>📌 One-click saving of important web resources</li>
+                <li>📌 One Gautam-click saving of important web resources</li>
                 <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
                 <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
                 <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
