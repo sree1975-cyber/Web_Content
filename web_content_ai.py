@@ -13,9 +13,12 @@ from PIL import Image
 import io
 import base64
 from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 from streamlit_option_menu import option_menu
 from streamlit_tags import st_tags
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
 
 # Set page configuration (MUST be the first Streamlit command)
 st.set_page_config(
@@ -36,7 +39,7 @@ def get_image_base64():
 def init_db():
     """Initialize database with error handling"""
     try:
-        conn = sqlite3.connect('web_content.db')
+        conn = sqlite3.connect('web_content.db', check_same_thread=False)
         c = conn.cursor()
         
         c.execute('''CREATE TABLE IF NOT EXISTS links
@@ -62,10 +65,18 @@ def init_db():
                       embedding BLOB)''')
         
         conn.commit()
+        logging.info("Database initialized successfully")
         return conn
     except Exception as e:
         st.error(f"Database initialization failed: {str(e)}")
+        logging.error(f"Database initialization failed: {str(e)}")
         return None
+
+def close_db(conn):
+    """Close database connection"""
+    if conn:
+        conn.close()
+        logging.info("Database connection closed")
 
 def display_header():
     """Display beautiful header with AI image"""
@@ -92,17 +103,22 @@ def fetch_metadata(url):
         return title, description
     except Exception as e:
         st.warning(f"Couldn't fetch metadata: {str(e)}")
+        logging.warning(f"Metadata fetch failed: {str(e)}")
         return url, ""
 
 def load_model():
     """Load sentence transformer model with error handling"""
     try:
-        # Explicitly load model on CPU for Streamlit Cloud
+        logging.info("Loading SentenceTransformer model...")
         model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+        logging.info("Model loaded successfully")
         return model
     except Exception as e:
         st.error(f"Model loading failed: {str(e)}")
-        st.info("Please ensure all requirements are installed and try again")
+        logging.error(f"Model loading failed: {str(e)}")
+        st&
+```python
+.info("Please ensure all requirements are installed and try again")
         return None
 
 def save_link(conn, model, url, title, description, tags):
@@ -112,6 +128,7 @@ def save_link(conn, model, url, title, description, tags):
         c = conn.cursor()
         
         # Save link
+        logging.info(f"Saving link: {url}")
         c.execute("""
             INSERT OR REPLACE INTO links 
             (url, title, description, created_at, updated_at) 
@@ -142,6 +159,7 @@ def save_link(conn, model, url, title, description, tags):
         """, (link_id, embedding.tobytes()))
         
         conn.commit()
+        logging.info(f"Link saved successfully: {url}")
         st.success("✅ Link saved successfully!")
         st.balloons()
         
@@ -153,8 +171,9 @@ def save_link(conn, model, url, title, description, tags):
             
     except Exception as e:
         st.error(f"Error saving link: {str(e)}")
+        logging.error(f"Error saving link: {str(e)}")
+        conn.rollback()
 
-# Section functions
 def add_link_section(conn, model):
     """Section for adding new links"""
     st.subheader("🌐 Add New Web Content")
@@ -182,37 +201,39 @@ def add_link_section(conn, model):
     )
     
     if st.button("💾 Save Link", disabled=not url):
-        save_link(conn, model, url, title, description, tags)
+        saveicznie_link(conn, model, url, title, description, tags)
 
 def browse_section(conn):
-    """Placeholder for browse section"""
-    st.subheader("📚 Browse Links")
-    st.write("Browse functionality not implemented yet.")
+    """Section for browsing saved links"""
+    st.subheader("📚 Browse Saved Links")
+    
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id, url, title, description, created_at FROM links ORDER BY created_at DESC")
+        links = c.fetchall()
+        
+        if not links:
+            st.info("No links saved yet. Add a link to get started!")
+            return
+        
+        for link_id, url, title, description, created_at in links:
+            with st.expander(f"{title or url} (Saved: {created_at})"):
+                st.write(f**URL**: {url}")
+                st.write(f**Description**: {description or 'No description'}")
+                # Fetch tags
+                c.execute("""
+                    SELECT t.name FROM tags t
+                    JOIN link_tags lt ON t.id = lt.tag_id
+                    WHERE lt.link_id = ?
+                """, (link_id,))
+                tags = [row[0] for row in c.fetchall()]
+                st.write(f**Tags**: {', '.join(tags) if tags else 'None'}")
+    except Exception as e:
+        st.error(f"Error fetching links: {str(e)}")
+        logging.error(f"Error fetching links: {str(e)}")
 
-def search_section(conn, model):
-    """Placeholder for search section"""
-    st.subheader("🔍 Search Links")
-    st.write("Search functionality not implemented yet.")
-
-def tags_section(conn):
-    """Placeholder for tags section"""
-    st.subheader("🏷️ Manage Tags")
-    st.write("Tags functionality not implemented yet.")
-
-def settings_section():
-    """Placeholder for settings section"""
-    st.subheader("⚙️ Settings")
-    st.write("Settings functionality not implemented yet.")
-
-# Main application function
+# Main function
 def main():
-    # Initialize components
-    conn = init_db()
-    model = load_model()
-    
-    if conn is None or model is None:
-        return
-    
     # Display header
     display_header()
     
@@ -228,12 +249,19 @@ def main():
         Get started by selecting an option from the sidebar!
         """)
     
+    # Initialize components
+    conn = init_db()
+    model = load_model()
+    
+    if conn is None or model is None:
+        return
+    
     # Sidebar navigation
     with st.sidebar:
         selected = option_menu(
             "Main Menu",
-            ["Add Link", "Browse", "Search", "Tags", "Settings"],
-            icons=['plus-circle', 'book', 'search', 'tags', 'gear'],
+            ["Add Link", "Browse"],
+            icons=['plus-circle', 'book'],
             default_index=0
         )
     
@@ -242,12 +270,9 @@ def main():
         add_link_section(conn, model)
     elif selected == "Browse":
         browse_section(conn)
-    elif selected == "Search":
-        search_section(conn, model)
-    elif selected == "Tags":
-        tags_section(conn)
-    elif selected == "Settings":
-        settings_section()
+    
+    # Close database connection
+    close_db(conn)
 
 if __name__ == "__main__":
     main()
