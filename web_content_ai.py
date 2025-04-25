@@ -171,30 +171,49 @@ def fetch_metadata(url):
         return url, "", []
 
 def add_link_section(df, excel_file):
-    """Section for adding new links"""
+    """Section for adding new links with working Fetch button"""
     st.markdown("### 🌐 Add New Web Content")
     
+    # Use session state to track URL changes
+    if 'url_input' not in st.session_state:
+        st.session_state.url_input = ""
+    
+    # URL input (outside form to allow real-time changes)
+    url = st.text_input(
+        "URL*", 
+        placeholder="https://example.com",
+        key="url_input",  # Track changes in session state
+        help="Enter the full URL including https://"
+    )
+    
+    # Check if URL is non-empty and valid (basic check)
+    is_url_valid = url.startswith(("http://", "https://")) if url else False
+    
+    # Fetch button (now enabled only if URL is valid)
+    if st.button("Fetch Metadata", disabled=not is_url_valid):
+        with st.spinner("Fetching..."):
+            title, description, keywords = fetch_metadata(url)
+            st.session_state['auto_title'] = title
+            st.session_state['auto_description'] = description
+            st.session_state['suggested_tags'] = keywords
+            st.rerun()  # Refresh to update fields
+    
+    # The rest of the form (for title, description, tags, etc.)
     with st.form("add_link_form", clear_on_submit=True):
-        url = st.text_input("URL*", placeholder="https://example.com", 
-                           help="Enter the full URL including https://")
+        title = st.text_input(
+            "Title*", 
+            value=st.session_state.get('auto_title', ''),
+            help="Give your link a descriptive title"
+        )
         
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            title = st.text_input("Title*", value=st.session_state.get('auto_title', ''), 
-                                help="Give your link a descriptive title")
-        with col2:
-            if st.form_submit_button("Fetch Metadata", disabled=not url):
-                with st.spinner("Fetching..."):
-                    title_val, description, keywords = fetch_metadata(url)
-                    st.session_state['auto_title'] = title_val
-                    st.session_state['auto_description'] = description
-                    st.session_state['suggested_tags'] = keywords
-                    st.rerun()
+        description = st.text_area(
+            "Description", 
+            value=st.session_state.get('auto_description', ''),
+            height=100,
+            help="Add notes about why this link is important"
+        )
         
-        description = st.text_area("Description", value=st.session_state.get('auto_description', ''), 
-                                 height=100, help="Add notes about why this link is important")
-        
-        # Smart tagging with suggestions from metadata
+        # Smart tags (from fetched metadata)
         suggested_tags = st.session_state.get('suggested_tags', []) + \
                        ['research', 'tutorial', 'news', 'tool', 'inspiration']
         
@@ -206,6 +225,7 @@ def add_link_section(df, excel_file):
             key="tags_input"
         )
         
+        # Submit button for saving the link
         submitted = st.form_submit_button("💾 Save Link")
         
         if submitted and url and title:
@@ -213,12 +233,7 @@ def add_link_section(df, excel_file):
             if action:
                 if save_data(df, excel_file):
                     st.success(f"✅ Link {action} successfully!")
-                    st.session_state['df'] = df
                     st.balloons()
-                    # Clear session state
-                    for key in ['auto_title', 'auto_description', 'suggested_tags']:
-                        if key in st.session_state:
-                            del st.session_state[key]
                     st.rerun()
     
     return df
