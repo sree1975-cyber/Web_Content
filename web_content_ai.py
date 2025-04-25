@@ -77,6 +77,12 @@ st.markdown("""
         margin-left: 0.5rem;
         text-decoration: none;
     }
+    
+    /* Search bar active state */
+    .search-active {
+        border: 2px solid #4f46e5;
+        border-radius: 5px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -88,7 +94,11 @@ def init_data():
             df = pd.read_excel(excel_file, engine='openpyxl')
             # Convert tags from string to list
             if 'tags' in df.columns:
-                df['tags'] = df['tags'].apply(lambda x: x.split(',') if isinstance(x, str) else [])
+                df['tags'] = df['tags'].apply(lambda x: x.split(',') if isinstance(x, str) else [] if pd.isna(x) else x)
+            # Ensure string types
+            for col in ['title', 'url', 'description']:
+                if col in df.columns:
+                    df[col] = df[col].astype(str).replace('nan', '')
             logging.info("Loaded existing Excel file")
         else:
             df = pd.DataFrame(columns=[
@@ -312,40 +322,61 @@ def browse_section(df, excel_file):
     # Powerful search functionality
     search_col, tag_col = st.columns([3, 1])
     with search_col:
-        search_query = st.text_input("Search content", 
-                                    placeholder="Search by title, URL, description or tags")
+        search_query = st.text_input(
+            "Search content",
+            placeholder="Search by title, URL, description, or tags",
+            key="search_query",
+            help="Enter words to filter links (e.g., part of title or tag)"
+        )
+        if search_query:
+            st.markdown(f"<small>Searching for: <strong>{escape(search_query)}</strong></small>", unsafe_allow_html=True)
     with tag_col:
         # Get all unique tags
         all_tags = sorted({str(tag).strip() for sublist in df['tags'] 
                          for tag in (sublist if isinstance(sublist, list) else []) 
                          if str(tag).strip()})
-        selected_tags = st.multiselect("Filter by tags", options=all_tags)
+        selected_tags = st.multiselect("Filter by tags", options=all_tags, key="tag_filter")
     
     # Apply search filters
     filtered_df = df.copy()
     
     if search_query:
+        logging.debug(f"Applying search query: {search_query}")
         search_lower = search_query.lower()
-        mask = (
-            filtered_df['title'].str.lower().str.contains(search_lower, na=False) |
-            filtered_df['url'].str.lower().str.contains(search_lower, na=False) |
-            filtered_df['description'].str.lower().str.contains(search_lower, na=False) |
-            filtered_df['tags'].apply(
-                lambda x: any(search_lower in str(tag).lower() for tag in (x if isinstance(x, list) else []))
+        try:
+            mask = (
+                filtered_df['title'].str.lower().str.contains(search_lower, na=False) |
+                filtered_df['url'].str.lower().str.contains(search_lower, na=False) |
+                filtered_df['description'].str.lower().str.contains(search_lower, na=False) |
+                filtered_df['tags'].apply(
+                    lambda x: any(search_lower in str(tag).lower() for tag in (x if isinstance(x, list) else []))
+                )
             )
-        )
-        filtered_df = filtered_df[mask]
+            filtered_df = filtered_df[mask]
+            logging.debug(f"Search results: {len(filtered_df)} links found")
+        except Exception as e:
+            st.error(f"Search error: {str(e)}")
+            logging.error(f"Search failed: {str(e)}")
     
     if selected_tags:
-        mask = filtered_df['tags'].apply(
-            lambda x: any(str(tag) in map(str, (x if isinstance(x, list) else [])) 
-                          for tag in selected_tags)
-        )
-        filtered_df = filtered_df[mask]
+        logging.debug(f"Applying tag filter: {selected_tags}")
+        try:
+            mask = filtered_df['tags'].apply(
+                lambda x: any(str(tag) in map(str, (x if isinstance(x, list) else [])) 
+                              for tag in selected_tags)
+            )
+            filtered_df = filtered_df[mask]
+            logging.debug(f"Tag filter results: {len(filtered_df)} links found")
+        except Exception as e:
+            st.error(f"Tag filter error: {str(e)}")
+            logging.error(f"Tag filter failed: {str(e)}")
     
     if filtered_df.empty:
         st.warning("No links match your search criteria")
         return
+    
+    # Display number of results
+    st.markdown(f"<small>Found <strong>{len(filtered_df)}</strong> link(s)</small>", unsafe_allow_html=True)
     
     # Initialize session state for selected links
     if 'selected_urls' not in st.session_state:
