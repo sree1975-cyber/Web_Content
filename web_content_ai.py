@@ -56,7 +56,7 @@ st.markdown("""
         background: #e0e7ff;
         color: #4f46e5;
         padding: 0.2rem 0.5rem;
-                                     border-radius: 1rem;
+        border-radius: 1rem;
         font-size: 0.8rem;
         margin-right: 0.5rem;
         margin-bottom: 0.3rem;
@@ -167,21 +167,24 @@ def save_link(df, url, title, description, tags):
         logging.error(f"Link save failed: {str(e)}")
         return df, None
 
-def delete_link(df, excel_file, url):
-    """Delete a link from the DataFrame"""
+def delete_selected_links(df, excel_file, selected_urls):
+    """Delete selected links from the DataFrame"""
     try:
-        if url in df['url'].values:
-            df = df[df['url'] != url]
-            if save_data(df, excel_file):
-                st.success("✅ Link deleted successfully!")
-                st.session_state['df'] = df
-                st.balloons()
-                return df
+        logging.debug(f"Deleting URLs: {selected_urls}")
+        if not selected_urls:
+            st.warning("No links selected for deletion")
+            return df
+        df = df[~df['url'].isin(selected_urls)]
+        if save_data(df, excel_file):
+            st.session_state['df'] = df
+            st.success(f"✅ {len(selected_urls)} link(s) deleted successfully!")
+            st.balloons()
         else:
-            st.warning("Link not found in database")
+            st.error("Failed to save changes after deletion")
         return df
     except Exception as e:
-        st.error(f"Error deleting link: {str(e)}")
+        st.error(f"Error deleting links: {str(e)}")
+        logging.error(f"Delete links failed: {str(e)}")
         return df
 
 def display_header():
@@ -344,43 +347,45 @@ def browse_section(df, excel_file):
         st.warning("No links match your search criteria")
         return
     
-    # Display expandable DataFrame view
-    with st.expander("📊 View All Links as Data Table", expanded=False):
+    # Initialize session state for selected links
+    if 'selected_urls' not in st.session_state:
+        st.session_state.selected_urls = []
+
+    # Display DataFrame view with checkbox column
+    with st.expander("📊 View All Links as Data Table", expanded=True):
         display_df = filtered_df.copy()
         display_df['tags'] = display_df['tags'].apply(
             lambda x: ', '.join(str(tag) for tag in (x if isinstance(x, list) else [])))
-        st.dataframe(
-            display_df[['title', 'url', 'tags', 'created_at']],
+        
+        # Add checkbox column for selection
+        display_df['Select'] = [False] * len(display_df)
+        for i, row in display_df.iterrows():
+            display_df.at[i, 'Select'] = row['url'] in st.session_state.selected_urls
+        
+        # Render DataFrame with checkboxes
+        edited_df = st.data_editor(
+            display_df[['Select', 'title', 'url', 'description', 'tags', 'created_at']],
             use_container_width=True,
             hide_index=True,
             column_config={
+                "Select": st.column_config.CheckboxColumn("Select", help="Select links to delete"),
                 "title": "Title",
                 "url": st.column_config.LinkColumn("URL"),
+                "description": "Description",
                 "tags": "Tags",
                 "created_at": "Date Added"
-            }
+            },
+            disabled=['title', 'url', 'description', 'tags', 'created_at']  # Only allow editing 'Select'
         )
-    
-    # Display individual cards with delete functionality
-    for _, row in filtered_df.iterrows():
-        with st.expander(f"🔗 {escape(str(row['title']))}", expanded=False):
-            st.markdown(f"""
-            <div class="card">
-                <p><strong>URL:</strong> <a href="{escape(str(row['url']))}" target="_blank">{escape(str(row['url']))}</a></p>
-                <p><strong>Description:</strong> {escape(str(row['description'])) if pd.notna(row['description']) else 'No description available'}</p>
-                <div style="margin-top: 0.5rem;">
-                    {format_tags(row['tags'])}
-                </div>
-                <p style="font-size: 0.8rem; color: #666; margin-top: 0.5rem;">
-                    <strong>Added:</strong> {escape(str(row['created_at']))} | 
-                    <strong>Updated:</strong> {escape(str(row['updated_at']))}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Delete button
-            if st.button("🗑️ Delete Link", key=f"delete_{row['url']}", 
-                        on_click=lambda u=row['url']: delete_link(df, excel_file, u)):
+        
+        # Update selected_urls based on checkbox changes
+        st.session_state.selected_urls = edited_df[edited_df['Select']]['url'].tolist()
+        
+        # Show Delete Selected button if any links are selected
+        if st.session_state.selected_urls:
+            if st.button("🗑️ Delete Selected Links", key="delete_selected"):
+                df = delete_selected_links(df, excel_file, st.session_state.selected_urls)
+                st.session_state.selected_urls = []  # Clear selections
                 st.rerun()
 
 def format_tags(tags):
@@ -466,7 +471,7 @@ def main():
             <h3>Your Personal Web Library</h3>
             <p>Web Content Manager helps you save and organize web links with:</p>
             <ul>
-                <li>📌 One Gautam-click saving of important web resources</li>
+                <li>📌 One-click saving of important web resources</li>
                 <li>🏷️ <strong>Smart tagging</strong> - Automatically suggests tags from page metadata</li>
                 <li>🔍 <strong>Powerful search</strong> - Full-text search across all fields with tag filtering</li>
                 <li>🗑️ <strong>Delete functionality</strong> - Remove unwanted links</li>
