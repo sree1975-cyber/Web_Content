@@ -6,13 +6,6 @@ A robust application to save and organize web links with:
 - Visual bookmark management
 - Semantic content analysis
 - Beautiful UI with AI-generated images
-
-Features:
-1. Save links with automatic metadata extraction
-2. Organize with tags and categories
-3. Powerful semantic search
-4. Visual content browsing
-5. Browser integration ready
 """
 import streamlit as st
 import sqlite3
@@ -37,8 +30,6 @@ st.set_page_config(
 )
 
 # AI-generated header image (base64 encoded placeholder)
-HEADER_IMAGE = "iVBORw0KGgoAAAANSUhEUgAAAWgA..."  # Truncated for brevity
-
 def get_image_base64():
     """Return base64 encoded placeholder image"""
     img = Image.new('RGB', (800, 400), color='#4b8bbe')
@@ -110,7 +101,9 @@ def fetch_metadata(url):
 def load_model():
     """Load sentence transformer model with error handling"""
     try:
-        return SentenceTransformer('all-MiniLM-L6-v2')
+        # Explicitly load model on CPU to avoid GPU issues
+        model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+        return model
     except Exception as e:
         st.error(f"Model loading failed: {str(e)}")
         st.info("Please ensure all requirements are installed and try again")
@@ -237,7 +230,22 @@ def save_link(conn, model, url, title, description, tags):
     except Exception as e:
         st.error(f"Error saving link: {str(e)}")
 
-# [Rest of your functions (browse_section, search_section, etc.) would go here]
+# Placeholder for missing functions to avoid runtime errors
+def browse_section(conn):
+    st.subheader("Browse Links")
+    st.write("Browse functionality not implemented yet.")
 
-if __name__ == "__main__":
+def search_section(conn, model):
+    st.subheader("Search Links")
+    st.write("Search functionality not implemented yet.")
+
+def tags_section(conn):
+    st.subheader("Manage Tags")
+    st.write("Tags functionality not implemented yet.")
+
+def settings_section():
+    st.subheader("Settings")
+    st.write("Settings functionality not implemented yet.")
+
+if __name__ == "__ MEETINGmain__":
     main()
