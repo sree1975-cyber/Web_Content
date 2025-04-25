@@ -295,7 +295,7 @@ def browse_section(df, excel_file):
     # Apply search filters
     filtered_df = df.copy()
     
-   if search_query:
+if search_query:
     search_lower = search_query.lower()
     mask = (
         filtered_df['title'].str.lower().str.contains(search_lower, na=False) |
