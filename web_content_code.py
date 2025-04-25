@@ -296,12 +296,12 @@ def browse_section(conn):
         params = []
         
         if selected_tags:
-            query += """ JOIN link_tags lt ON l.id = lt.link_id
+            placeholders = ','.join(['?']*len(selected_tags))
+            query += f""" JOIN link_tags lt ON l.id = lt.link_id
                          JOIN tags t ON lt.tag_id = t.id
-                         WHERE t.name IN ({})""".format(
-                             ','.join(['?']*len(selected_tags))
+                         WHERE t.name IN ({placeholders})
+                         GROUP BY l.id HAVING COUNT(DISTINCT t.name) = ?"""
             params.extend(selected_tags)
-            query += " GROUP BY l.id HAVING COUNT(DISTINCT t.name) = ?"
             params.append(len(selected_tags))
         
         query += " ORDER BY l.created_at DESC"
